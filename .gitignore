@@ -1,0 +1,22 @@
+# Ignore everything
+*
+
+# Allow folders (biar bisa diakses)
+!exportTools/
+!utils/
+!icon/
+!assets/
+
+# Allow folder content
+!exportTools/**
+!utils/**
+!icon/**
+!assets/**
+
+# Allow specific files
+!.gitignore
+!README.md
+!LICENSE
+!visualize.png
+!boxify_linux_installation.bash
+!boxify_windows_installation.bat
