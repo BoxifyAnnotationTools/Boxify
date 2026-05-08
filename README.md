@@ -191,6 +191,44 @@ python exportTools/export2YOLOX.py
 
 <hr/>
 
+<hr/>
+
+<h2>🤝 Contributing</h2>
+
+<h3>How to Contribute</h3>
+<p>
+I am very open to anyone who wants to help make Boxify better! To keep the codebase organized and stable, I follow a standard branch-based workflow. Please follow these steps to contribute:
+</p>
+
+<ol>
+  <li><strong>Fork the Repository:</strong> Click the <code>Fork</code> button at the top right of this page to create a copy of the project in your own GitHub account.</li>
+  <li><strong>Clone the Project:</strong> Download the code from your forked repository to your local machine.
+    <pre>git clone https://github.com/YOUR_USERNAME/Boxify-Local.git</pre>
+  </li>
+  <li><strong>Create a New Branch:</strong> Avoid making changes directly to the <code>main</code> branch. Create a sub-branch for your feature or bug fix.
+    <pre>git checkout -b feature/your-feature-name</pre>
+    <em>Example: <code>git checkout -b feature/dark-mode-support</code> or <code>fix/zoom-issue</code></em>
+  </li>
+  <li><strong>Commit Your Changes:</strong> Save your progress with a clear and descriptive commit message.
+    <pre>git commit -m "Add: support for Dark Mode interface"</pre>
+  </li>
+  <li><strong>Push to GitHub:</strong> Upload your new branch to your forked repository.
+    <pre>git push origin feature/your-feature-name</pre>
+  </li>
+  <li><strong>Create a Pull Request:</strong> Go to the original Boxify repository. You will see a notification to create a <code>Pull Request</code>. Explain your changes and submit it for review.</li>
+</ol>
+
+<h3>Areas for Contribution</h3>
+<ul>
+  <li><strong>Code Refactoring & Optimization:</strong> Improving logic efficiency, performance, and overall code quality.</li>
+  <li><strong>Feature Development:</strong> Implementing new tools, automation capabilities, or user-requested features.</li>
+  <li><strong>Bug Fixes & Documentation:</strong> Resolving issues and improving the clarity of installation or usage guides.</li>
+</ul>
+
+<p><strong>Note:</strong> Please ensure your code is tested locally before submitting a Pull Request to maintain the stability of the core application.</p>
+
+<hr/>
+
 <h2>⚠️ Known Issues</h2>
 
 <h3>RuntimeError: ran out of input</h3>
