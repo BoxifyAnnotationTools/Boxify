@@ -203,7 +203,7 @@ I am very open to anyone who wants to help make Boxify better! To keep the codeb
 <ol>
   <li><strong>Fork the Repository:</strong> Click the <code>Fork</code> button at the top right of this page to create a copy of the project in your own GitHub account.</li>
   <li><strong>Clone the Project:</strong> Download the code from your forked repository to your local machine.
-    <pre>git clone https://github.com/YOUR_USERNAME/Boxify-Local.git</pre>
+    <pre>git clone https://github.com/BoxifyAnnotationTools/Boxify.git</pre>
   </li>
   <li><strong>Create a New Branch:</strong> Avoid making changes directly to the <code>main</code> branch. Create a sub-branch for your feature or bug fix.
     <pre>git checkout -b feature/your-feature-name</pre>
