@@ -61,7 +61,11 @@ chmod +x Boxify.desktop
 
 <h4>Windows</h4>
 <pre>
-On your explorer, right click at "boxify_windows_installation" and "Run as Administrator"
+1. Install Microsoft Visual C++ Redistributable from the "VC_redist" folder
+   (choose the installer that matches your system architecture: x64, x86, or ARM64).
+
+2. In File Explorer, right-click "boxify_windows_installation.bat"
+   and select "Run as administrator".
 </pre>
 
 <p>After installation, double-click the Boxify icon.</p>

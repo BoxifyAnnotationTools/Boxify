@@ -6,12 +6,14 @@
 !utils/
 !icon/
 !assets/
+!VC_redist/
 
 # Allow folder content
 !exportTools/**
 !utils/**
 !icon/**
 !assets/**
+!VC_redist/**
 
 # Allow specific files
 !.gitignore
