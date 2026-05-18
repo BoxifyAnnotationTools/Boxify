@@ -61,7 +61,7 @@ chmod +x Boxify.desktop
 
 <h4>Windows</h4>
 <pre>
-Run: boxify_windows_installation.bat
+On your explorer, right click at "boxify_windows_installation" and "Run as Administrator"
 </pre>
 
 <p>After installation, double-click the Boxify icon.</p>
