@@ -1,991 +1,119 @@
-<!DOCTYPE html>
-
+<!doctype html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-```
-<meta name="google-site-verification" content="2dDeMeLVPGU-jXJDLVFoqY3q3CPxB_4xz4yJbas3ano" />
-<meta name="description" content="Boxify — A local annotation tool for efficient computer vision dataset labeling.">
-<meta name="theme-color" content="#080b14">
-
-<title>Boxify — Local Annotation Tool</title>
-
-<style>
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-    }
-
-    html {
-        scroll-behavior: smooth;
-    }
-
-    body {
-        font-family:
-            Inter,
-            ui-sans-serif,
-            system-ui,
-            -apple-system,
-            BlinkMacSystemFont,
-            "Segoe UI",
-            sans-serif;
-
-        background: #080b14;
-        color: #f8fafc;
-        line-height: 1.6;
-    }
-
-    a {
-        color: inherit;
-        text-decoration: none;
-    }
-
-    /* =========================
-       NAVBAR
-    ========================= */
-
-    nav {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        z-index: 100;
-
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-
-        max-width: 1200px;
-        margin: auto;
-        padding: 18px 28px;
-
-        background: rgba(8, 11, 20, 0.72);
-        backdrop-filter: blur(18px);
-    }
-
-    .brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-
-        font-size: 18px;
-        font-weight: 800;
-        letter-spacing: -0.02em;
-    }
-
-    .brand-logo {
-        width: 34px;
-        height: 34px;
-
-        object-fit: contain;
-        border-radius: 9px;
-
-        filter: drop-shadow(
-            0 4px 12px rgba(59, 130, 246, 0.15)
-        );
-    }
-
-    .nav-github {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-
-        padding: 8px 14px;
-
-        border: 1px solid rgba(255, 255, 255, .1);
-        border-radius: 9px;
-
-        color: #cbd5e1;
-        font-size: 13px;
-        font-weight: 600;
-
-        transition: .25s ease;
-    }
-
-    .nav-github:hover {
-        background: rgba(255, 255, 255, .06);
-        color: white;
-    }
-
-    /* =========================
-       HERO
-    ========================= */
-
-    .hero {
-        position: relative;
-        min-height: 100vh;
-
-        display: flex;
-        align-items: center;
-        justify-content: center;
-
-        padding: 140px 24px 100px;
-
-        overflow: hidden;
-        text-align: center;
-    }
-
-    .hero::before {
-        content: "";
-
-        position: absolute;
-        inset: 0;
-
-        background-image:
-            linear-gradient(
-                rgba(148, 163, 184, .035) 1px,
-                transparent 1px
-            ),
-            linear-gradient(
-                90deg,
-                rgba(148, 163, 184, .035) 1px,
-                transparent 1px
-            );
-
-        background-size: 55px 55px;
-
-        mask-image: linear-gradient(
-            to bottom,
-            transparent,
-            black 25%,
-            black 70%,
-            transparent
-        );
-    }
-
-    .orb {
-        position: absolute;
-
-        width: 500px;
-        height: 500px;
-
-        border-radius: 50%;
-        filter: blur(120px);
-
-        opacity: .15;
-        pointer-events: none;
-    }
-
-    .orb-blue {
-        top: 5%;
-        left: 10%;
-        background: #2563eb;
-    }
-
-    .orb-purple {
-        right: 5%;
-        bottom: 5%;
-        background: #9333ea;
-    }
-
-    .hero-content {
-        position: relative;
-        z-index: 2;
-
-        width: min(900px, 100%);
-
-        animation: fadeUp .8s ease-out;
-    }
-
-    .hero-logo {
-        width: 115px;
-        height: 115px;
-
-        object-fit: contain;
-
-        margin-bottom: 25px;
-
-        filter:
-            drop-shadow(0 15px 35px rgba(59, 130, 246, .18));
-    }
-
-    .badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-
-        padding: 7px 13px;
-        margin-bottom: 28px;
-
-        border: 1px solid rgba(96, 165, 250, .2);
-        border-radius: 999px;
-
-        background: rgba(59, 130, 246, .07);
-
-        color: #93c5fd;
-        font-size: 12px;
-        font-weight: 600;
-    }
-
-    .badge-dot {
-        width: 7px;
-        height: 7px;
-
-        border-radius: 50%;
-
-        background: #60a5fa;
-
-        box-shadow:
-            0 0 12px #60a5fa;
-    }
-
-    h1 {
-        font-size: clamp(4rem, 10vw, 8rem);
-
-        line-height: .9;
-
-        letter-spacing: -.075em;
-
-        font-weight: 900;
-    }
-
-    .gradient-text {
-        display: block;
-
-        background:
-            linear-gradient(
-                120deg,
-                #60a5fa,
-                #818cf8 45%,
-                #c084fc
-            );
-
-        -webkit-background-clip: text;
-        background-clip: text;
-
-        color: transparent;
-    }
-
-    .hero-description {
-        max-width: 650px;
-
-        margin: 32px auto 38px;
-
-        color: #94a3b8;
-
-        font-size: 18px;
-        line-height: 1.8;
-    }
-
-    .hero-buttons {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-
-        gap: 12px;
-
-        flex-wrap: wrap;
-    }
-
-    .primary-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-
-        gap: 10px;
-
-        padding: 14px 22px;
-
-        border-radius: 12px;
-
-        background: #f8fafc;
-        color: #080b14;
-
-        font-size: 14px;
-        font-weight: 750;
-
-        box-shadow:
-            0 15px 40px rgba(0, 0, 0, .3);
-
-        transition: .25s ease;
-    }
-
-    .primary-button:hover {
-        transform: translateY(-3px);
-
-        box-shadow:
-            0 20px 50px rgba(0, 0, 0, .4),
-            0 0 35px rgba(96, 165, 250, .12);
-    }
-
-    .secondary-button {
-        padding: 14px 22px;
-
-        border: 1px solid rgba(255, 255, 255, .1);
-        border-radius: 12px;
-
-        background: rgba(255, 255, 255, .035);
-
-        color: #cbd5e1;
-
-        font-size: 14px;
-        font-weight: 650;
-
-        transition: .25s ease;
-    }
-
-    .secondary-button:hover {
-        background: rgba(255, 255, 255, .07);
-        color: white;
-    }
-
-    /* =========================
-       SECTION
-    ========================= */
-
-    section {
-        max-width: 1100px;
-
-        margin: auto;
-
-        padding: 100px 24px;
-    }
-
-    .section-label {
-        margin-bottom: 12px;
-
-        color: #60a5fa;
-
-        font-size: 12px;
-        font-weight: 700;
-
-        text-transform: uppercase;
-
-        letter-spacing: .12em;
-    }
-
-    .section-title {
-        max-width: 700px;
-
-        font-size: clamp(2rem, 5vw, 3.2rem);
-
-        line-height: 1.1;
-
-        letter-spacing: -.045em;
-    }
-
-    .section-description {
-        max-width: 650px;
-
-        margin-top: 18px;
-
-        color: #64748b;
-    }
-
-    /* =========================
-       FEATURES
-    ========================= */
-
-    .features {
-        display: grid;
-
-        grid-template-columns:
-            repeat(3, 1fr);
-
-        gap: 16px;
-
-        margin-top: 50px;
-    }
-
-    .feature-card {
-        padding: 28px;
-
-        border: 1px solid rgba(255, 255, 255, .07);
-
-        border-radius: 18px;
-
-        background:
-            linear-gradient(
-                145deg,
-                rgba(255, 255, 255, .045),
-                rgba(255, 255, 255, .015)
-            );
-
-        transition:
-            transform .25s ease,
-            border-color .25s ease;
-    }
-
-    .feature-card:hover {
-        transform: translateY(-5px);
-
-        border-color:
-            rgba(96, 165, 250, .25);
-    }
-
-    .feature-icon {
-        width: 42px;
-        height: 42px;
-
-        display: grid;
-        place-items: center;
-
-        margin-bottom: 20px;
-
-        border-radius: 12px;
-
-        background:
-            rgba(59, 130, 246, .1);
-
-        color: #60a5fa;
-
-        font-size: 20px;
-    }
-
-    .feature-card h3 {
-        margin-bottom: 9px;
-
-        font-size: 17px;
-    }
-
-    .feature-card p {
-        color: #64748b;
-
-        font-size: 14px;
-    }
-
-    /* =========================
-       HIGHLIGHTS
-    ========================= */
-
-    .highlights {
-        display: grid;
-
-        grid-template-columns:
-            repeat(4, 1fr);
-
-        gap: 12px;
-
-        margin-top: 50px;
-    }
-
-    .highlight {
-        padding: 22px;
-
-        border-left:
-            1px solid rgba(255, 255, 255, .08);
-
-        background:
-            rgba(255, 255, 255, .02);
-    }
-
-    .highlight strong {
-        display: block;
-
-        margin-bottom: 5px;
-
-        font-size: 15px;
-    }
-
-    .highlight span {
-        color: #64748b;
-
-        font-size: 13px;
-    }
-
-    /* =========================
-       CTA
-    ========================= */
-
-    .cta {
-        position: relative;
-
-        max-width: 1100px;
-
-        margin: 60px auto 100px;
-
-        padding: 80px 30px;
-
-        overflow: hidden;
-
-        border:
-            1px solid rgba(96, 165, 250, .12);
-
-        border-radius: 24px;
-
-        text-align: center;
-
-        background:
-            radial-gradient(
-                circle at 50% 0%,
-                rgba(59, 130, 246, .13),
-                transparent 55%
-            ),
-            rgba(255, 255, 255, .025);
-    }
-
-    .cta h2 {
-        position: relative;
-
-        font-size:
-            clamp(2rem, 5vw, 3.5rem);
-
-        line-height: 1.1;
-
-        letter-spacing: -.05em;
-    }
-
-    .cta p {
-        position: relative;
-
-        max-width: 550px;
-
-        margin: 18px auto 30px;
-
-        color: #64748b;
-    }
-
-    /* =========================
-       FOOTER
-    ========================= */
-
-    footer {
-        padding: 30px 24px 40px;
-
-        border-top:
-            1px solid rgba(255, 255, 255, .05);
-
-        text-align: center;
-
-        color: #475569;
-
-        font-size: 12px;
-    }
-
-    /* =========================
-       ANIMATION
-    ========================= */
-
-    @keyframes fadeUp {
-
-        from {
-            opacity: 0;
-            transform: translateY(22px);
-        }
-
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-    }
-
-    /* =========================
-       RESPONSIVE
-    ========================= */
-
-    @media (max-width: 800px) {
-
-        .features {
-            grid-template-columns: 1fr;
-        }
-
-        .highlights {
-            grid-template-columns:
-                repeat(2, 1fr);
-        }
-
-        nav {
-            padding: 16px 20px;
-        }
-
-    }
-
-    @media (max-width: 500px) {
-
-        .hero {
-            padding-top: 120px;
-        }
-
-        .hero-logo {
-            width: 90px;
-            height: 90px;
-        }
-
-        h1 {
-            font-size:
-                clamp(3.5rem, 18vw, 5rem);
-        }
-
-        .hero-description {
-            font-size: 15px;
-        }
-
-        .hero-buttons {
-            flex-direction: column;
-        }
-
-        .primary-button,
-        .secondary-button {
-            width: 100%;
-            max-width: 300px;
-        }
-
-        .highlights {
-            grid-template-columns: 1fr;
-        }
-
-        section {
-            padding: 75px 20px;
-        }
-
-    }
-</style>
-```
-
+    <meta name="google-site-verification" content="2dDeMeLVPGU-jXJDLVFoqY3q3CPxB_4xz4yJbas3ano">
+    <meta name="description" content="Boxify is a local computer vision annotation tool for YOLO object detection and image segmentation datasets.">
+    <meta name="theme-color" content="#0d1117">
+    <title>Boxify | Local Computer Vision Annotation</title>
+    <link rel="icon" href="assets/boxify.png" type="image/png">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+        :root { --ink:#0d1117; --ink-soft:#141b23; --panel:#18212b; --line:rgba(231,241,246,.13); --text:#eef4f3; --muted:#91a0a7; --lime:#d7f36b; --cyan:#74e6e1; --coral:#ff866f; --mono:'DM Mono',monospace; --sans:'Manrope',sans-serif; }
+        * { box-sizing:border-box; }
+        html { scroll-behavior:smooth; }
+        body { margin:0; background:var(--ink); color:var(--text); font-family:var(--sans); line-height:1.55; }
+        body::before { content:''; position:fixed; inset:0; z-index:-1; opacity:.32; pointer-events:none; background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px); background-size:48px 48px; mask-image:linear-gradient(to bottom,black,transparent 78%); }
+        a { color:inherit; text-decoration:none; }
+        .shell { width:min(1180px,calc(100% - 48px)); margin:0 auto; }
+        .nav { position:sticky; top:0; z-index:10; border-bottom:1px solid var(--line); background:rgba(13,17,23,.88); backdrop-filter:blur(16px); }
+        .nav-inner { height:76px; display:flex; align-items:center; justify-content:space-between; }
+        .brand { display:flex; align-items:center; gap:11px; font-weight:800; letter-spacing:-.04em; }
+        .brand img { width:31px; height:31px; border-radius:8px; }
+        .brand small { display:block; color:var(--muted); font:500 9px var(--mono); letter-spacing:.08em; text-transform:uppercase; }
+        .nav-links { display:flex; align-items:center; gap:28px; color:var(--muted); font-size:13px; }
+        .nav-links a:hover { color:var(--text); }
+        .nav-cta { padding:10px 15px; border:1px solid var(--lime); color:var(--lime); font-size:12px; font-weight:800; }
+        .hero { padding:92px 0 78px; }
+        .hero-grid { display:grid; grid-template-columns:.82fr 1.18fr; gap:72px; align-items:center; }
+        .eyebrow { display:flex; align-items:center; gap:10px; color:var(--lime); font:500 11px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
+        .eyebrow::before { content:''; width:30px; height:1px; background:var(--lime); }
+        h1,h2,h3,p { margin-top:0; }
+        h1 { max-width:620px; margin:22px 0; font-size:clamp(3.5rem,7vw,6.6rem); line-height:.94; letter-spacing:-.085em; }
+        h1 em { color:var(--lime); font-style:normal; }
+        .hero-copy { max-width:480px; color:var(--muted); font-size:17px; }
+        .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:31px; }
+        .button { display:inline-flex; align-items:center; gap:14px; padding:14px 18px; border:1px solid var(--line); font-size:13px; font-weight:800; transition:transform .2s ease,background .2s ease,color .2s ease; }
+        .button:hover { transform:translateY(-3px); }
+        .button-primary { background:var(--lime); border-color:var(--lime); color:var(--ink); }
+        .button-secondary:hover { background:var(--panel); }
+        .meta-row { display:flex; gap:22px; margin-top:42px; color:var(--muted); font:400 11px var(--mono); }
+        .meta-row strong { display:block; margin-bottom:3px; color:var(--text); font:700 15px var(--sans); }
+        .screen-wrap { position:relative; }
+        .screen-wrap::before { content:'LIVE WORKSPACE PREVIEW'; position:absolute; right:18px; top:-12px; z-index:2; padding:7px 9px; background:var(--coral); color:var(--ink); font:700 10px var(--mono); letter-spacing:.06em; }
+        .screen { padding:10px; border:1px solid rgba(116,230,225,.28); background:#080b0f; box-shadow:18px 18px 0 rgba(215,243,107,.08); transform:rotate(1.2deg); }
+        .screen img { display:block; width:100%; height:auto; border:1px solid var(--line); }
+        .caption { margin-top:13px; color:var(--muted); font:400 10px var(--mono); }
+        .strip { border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--ink-soft); }
+        .strip-inner { display:grid; grid-template-columns:repeat(4,1fr); }
+        .strip-item { padding:21px 20px; border-right:1px solid var(--line); }
+        .strip-item:last-child { border-right:0; }
+        .strip-item strong { display:block; margin-bottom:4px; color:var(--cyan); font:500 11px var(--mono); text-transform:uppercase; }
+        .strip-item span { color:var(--muted); font-size:13px; }
+        .section { padding:125px 0; }
+        .section-head { display:grid; grid-template-columns:.7fr 1fr; gap:50px; align-items:end; }
+        .section h2 { max-width:680px; margin:16px 0 0; font-size:clamp(2.5rem,5vw,4.6rem); line-height:.98; letter-spacing:-.075em; }
+        .section-lead { max-width:430px; margin:0; color:var(--muted); font-size:15px; }
+        .feature-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin-top:56px; border:1px solid var(--line); background:var(--line); }
+        .feature { min-height:210px; padding:27px; background:var(--ink-soft); transition:background .2s ease; }
+        .feature:hover { background:var(--panel); }
+        .feature-index { color:var(--coral); font:500 11px var(--mono); }
+        .feature h3 { margin:45px 0 8px; font-size:18px; letter-spacing:-.03em; }
+        .feature p { margin:0; color:var(--muted); font-size:13px; }
+        .workspace { display:grid; grid-template-columns:1fr 1fr; gap:70px; align-items:center; }
+        .workspace-panel { padding:24px; border:1px solid var(--line); background:var(--panel); }
+        .window-bar { display:flex; justify-content:space-between; padding-bottom:18px; border-bottom:1px solid var(--line); color:var(--muted); font:400 10px var(--mono); }
+        .window-status { color:var(--lime); }
+        .workspace-map { display:grid; grid-template-columns:1fr 1.5fr 1fr; min-height:260px; margin-top:18px; border:1px solid var(--line); }
+        .map-col { padding:16px; border-right:1px solid var(--line); }
+        .map-col:last-child { border:0; }
+        .map-title { margin-bottom:17px; color:var(--cyan); font:500 10px var(--mono); text-transform:uppercase; }
+        .map-line { height:8px; margin:10px 0; background:rgba(255,255,255,.1); }
+        .map-line.short { width:62%; }
+        .map-canvas { position:relative; min-height:196px; background:#0a1118; }
+        .map-box { position:absolute; border:2px solid var(--lime); }
+        .map-box::after { content:'object'; position:absolute; top:-19px; left:-2px; padding:2px 5px; background:var(--lime); color:var(--ink); font:500 9px var(--mono); }
+        .map-box.one { top:32px; left:25px; width:82px; height:98px; }
+        .map-box.two { right:24px; bottom:31px; width:70px; height:66px; border-color:var(--coral); }
+        .workspace-copy ul { padding:0; margin:29px 0 0; list-style:none; }
+        .workspace-copy li { display:flex; gap:14px; padding:14px 0; border-bottom:1px solid var(--line); color:var(--muted); font-size:14px; }
+        .workspace-copy li b { color:var(--lime); font:500 11px var(--mono); }
+        .install { padding:30px; border:1px solid var(--line); background:var(--panel); }
+        .install-grid { display:grid; grid-template-columns:1fr 1fr; gap:1px; margin-top:44px; background:var(--line); }
+        .install-card { padding:28px; background:var(--ink-soft); }
+        .install-card h3 { margin-bottom:20px; }
+        pre { overflow-x:auto; padding:16px; margin:0; color:var(--cyan); background:#0a1015; font:400 12px/1.8 var(--mono); }
+        .final-cta { display:flex; align-items:end; justify-content:space-between; gap:40px; padding:70px 0 120px; }
+        .final-cta h2 { max-width:600px; margin:0; font-size:clamp(2.6rem,5vw,5rem); line-height:.96; letter-spacing:-.08em; }
+        footer { padding:24px 0 38px; border-top:1px solid var(--line); color:var(--muted); font:400 11px var(--mono); }
+        footer .shell { display:flex; justify-content:space-between; gap:20px; }
+        @keyframes rise { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
+        .hero-copy,.screen-wrap { animation:rise .7s ease both; }
+        .screen-wrap { animation-delay:.12s; }
+        @media (max-width:850px) { .hero-grid,.workspace,.section-head { grid-template-columns:1fr; gap:38px; } .hero { padding-top:60px; } .feature-grid { grid-template-columns:repeat(2,1fr); } .final-cta { align-items:start; flex-direction:column; } }
+        @media (max-width:560px) { .shell { width:min(100% - 32px,1180px); } .nav-links a:not(.nav-cta) { display:none; } h1 { font-size:clamp(3.3rem,17vw,5rem); } .strip-inner,.feature-grid,.install-grid { grid-template-columns:1fr; } .strip-item { border-right:0; border-bottom:1px solid var(--line); } .strip-item:last-child { border-bottom:0; } .feature { min-height:auto; } .screen { transform:none; } .workspace-panel { padding:12px; min-width:0; overflow:hidden; } .workspace-map { grid-template-columns:1fr 1.4fr; } .workspace-map .map-col:last-child { display:none; } .install-card, pre { min-width:0; max-width:100%; } footer .shell { align-items:start; flex-direction:column; } }
+        @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto !important; animation:none !important; transition:none !important; } }
+    </style>
 </head>
-
 <body>
-
-```
-<!-- =========================
-     NAVBAR
-========================== -->
-
-<nav>
-
-    <a
-        href="#"
-        class="brand"
-    >
-        <img
-            class="brand-logo"
-            src="https://raw.githubusercontent.com/BoxifyAnnotationTools/Boxify/main/assets/boxify.png"
-            alt="Boxify Logo"
-        >
-
-        <span>Boxify</span>
-    </a>
-
-    <a
-        class="nav-github"
-        href="https://github.com/BoxifyAnnotationTools/Boxify/tree/main"
-        target="_blank"
-        rel="noopener noreferrer"
-    >
-        GitHub ↗
-    </a>
-
-</nav>
-
-
-<!-- =========================
-     HERO
-========================== -->
-
-<main class="hero">
-
-    <div class="orb orb-blue"></div>
-    <div class="orb orb-purple"></div>
-
-    <div class="hero-content">
-
-        <div class="badge">
-
-            <span class="badge-dot"></span>
-
-            LOCAL • PRIVATE • AI-POWERED
-
+    <header class="nav">
+        <div class="shell nav-inner">
+            <a class="brand" href="#top" aria-label="Boxify home"><img src="assets/boxify.png" alt="Boxify logo"><span>BOXIFY<small>annotation tools</small></span></a>
+            <nav class="nav-links" aria-label="Main navigation"><a href="#features">Capabilities</a><a href="#workspace">Workspace</a><a href="#install">Install</a><a class="nav-cta" href="https://github.com/BoxifyAnnotationTools/Boxify" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav>
         </div>
-
-        <h1>
-
-            Boxify
-
-            <span class="gradient-text">
-                Annotation Tools
-            </span>
-
-        </h1>
-
-        <p class="hero-description">
-
-            A local annotation tool built for efficient
-            computer vision dataset labeling, automation,
-            and custom AI model integration.
-
-        </p>
-
-        <div class="hero-buttons">
-
-            <a
-                class="primary-button"
-                href="https://github.com/BoxifyAnnotationTools/Boxify/tree/main"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
-                View on GitHub
-                <span>→</span>
-            </a>
-
-            <a
-                class="secondary-button"
-                href="#features"
-            >
-                Explore Features
-            </a>
-
-        </div>
-
-    </div>
-
-</main>
-
-
-<!-- =========================
-     FEATURES
-========================== -->
-
-<section id="features">
-
-    <div class="section-label">
-        Why Boxify
-    </div>
-
-    <h2 class="section-title">
-        Annotation without the unnecessary complexity.
-    </h2>
-
-    <p class="section-description">
-
-        Boxify keeps your annotation workflow local,
-        fast, and flexible while giving you the ability
-        to integrate your own AI models.
-
-    </p>
-
-
-    <div class="features">
-
-        <div class="feature-card">
-
-            <div class="feature-icon">
-                ◉
-            </div>
-
-            <h3>
-                Fully Local
-            </h3>
-
-            <p>
-                Work entirely on your computer with no
-                cloud dependency. Your datasets stay private.
-            </p>
-
-        </div>
-
-
-        <div class="feature-card">
-
-            <div class="feature-icon">
-                ✦
-            </div>
-
-            <h3>
-                AI Automation
-            </h3>
-
-            <p>
-                Speed up annotation using automatic
-                bounding box and polygon detection.
-            </p>
-
-        </div>
-
-
-        <div class="feature-card">
-
-            <div class="feature-icon">
-                ⚙
-            </div>
-
-            <h3>
-                Custom Models
-            </h3>
-
-            <p>
-                Test and use your own trained models
-                directly inside your annotation workflow.
-            </p>
-
-        </div>
-
-
-        <div class="feature-card">
-
-            <div class="feature-icon">
-                ◇
-            </div>
-
-            <h3>
-                Smart Polygons
-            </h3>
-
-            <p>
-                Refine segmentation annotations with
-                snapping and intelligent polygon tools.
-            </p>
-
-        </div>
-
-
-        <div class="feature-card">
-
-            <div class="feature-icon">
-                ↗
-            </div>
-
-            <h3>
-                Multiple Formats
-            </h3>
-
-            <p>
-                Export your datasets using YOLO and
-                Pascal VOC compatible formats.
-            </p>
-
-        </div>
-
-
-        <div class="feature-card">
-
-            <div class="feature-icon">
-                ⚡
-            </div>
-
-            <h3>
-                Fast Setup
-            </h3>
-
-            <p>
-                Get your annotation environment running
-                in roughly 10 minutes.
-            </p>
-
-        </div>
-
-    </div>
-
-</section>
-
-
-<!-- =========================
-     HIGHLIGHTS
-========================== -->
-
-<section>
-
-    <div class="section-label">
-        Built for Computer Vision
-    </div>
-
-    <h2 class="section-title">
-        From annotation to inference.
-    </h2>
-
-
-    <div class="highlights">
-
-        <div class="highlight">
-
-            <strong>
-                Detection
-            </strong>
-
-            <span>
-                Bounding box annotation
-            </span>
-
-        </div>
-
-
-        <div class="highlight">
-
-            <strong>
-                Segmentation
-            </strong>
-
-            <span>
-                Polygon-based annotation
-            </span>
-
-        </div>
-
-
-        <div class="highlight">
-
-            <strong>
-                Inference
-            </strong>
-
-            <span>
-                Run your models locally
-            </span>
-
-        </div>
-
-
-        <div class="highlight">
-
-            <strong>
-                Training
-            </strong>
-
-            <span>
-                GPU-powered model training
-            </span>
-
-        </div>
-
-    </div>
-
-</section>
-
-
-<!-- =========================
-     CTA
-========================== -->
-
-<div class="cta">
-
-    <h2>
-        Ready to build better datasets?
-    </h2>
-
-    <p>
-
-        Explore the Boxify source code, installation
-        instructions, documentation, and contribution guide.
-
-    </p>
-
-    <a
-        class="primary-button"
-        href="https://github.com/BoxifyAnnotationTools/Boxify/tree/main"
-        target="_blank"
-        rel="noopener noreferrer"
-    >
-        Open Boxify on GitHub
-        <span>→</span>
-    </a>
-
-</div>
-
-
-<!-- =========================
-     FOOTER
-========================== -->
-
-<footer>
-
-    © 2026 Boxify Annotation Tools
-    · Built for Computer Vision & AI
-
-</footer>
-```
-
+    </header>
+    <main id="top">
+        <section class="hero shell"><div class="hero-grid"><div class="hero-copy"><div class="eyebrow">Local computer vision tooling</div><h1>Make your data <em>visible.</em></h1><p class="hero-copy">Boxify is a private, local-first annotation workspace for building object detection and image segmentation datasets with YOLO models.</p><div class="actions"><a class="button button-primary" href="https://github.com/BoxifyAnnotationTools/Boxify" target="_blank" rel="noopener noreferrer">Explore the repo <span>↗</span></a><a class="button button-secondary" href="#workspace">See the workspace <span>↓</span></a></div><div class="meta-row"><div><strong>100%</strong>local workflow</div><div><strong>YOLO</strong>ready</div><div><strong>MIT</strong>licensed</div></div></div><div class="screen-wrap"><div class="screen"><img src="assets/visualize.png" alt="Boxify annotation interface with image canvas, classes panel, and annotation controls"></div><div class="caption">01 / THE ANNOTATION WORKBENCH — real Boxify interface</div></div></div></section>
+        <div class="strip"><div class="shell strip-inner"><div class="strip-item"><strong>Detect</strong><span>Bounding boxes with direct manipulation</span></div><div class="strip-item"><strong>Segment</strong><span>Polygon tools for precise masks</span></div><div class="strip-item"><strong>Infer</strong><span>Run custom Ultralytics models locally</span></div><div class="strip-item"><strong>Export</strong><span>YOLO, COCO, or Pascal VOC</span></div></div></div>
+        <section class="section shell" id="features"><div class="section-head"><div><div class="eyebrow">The toolkit</div><h2>Less friction between image and insight.</h2></div><p class="section-lead">Everything you need to annotate, inspect, train, and export without sending your dataset through a cloud service.</p></div><div class="feature-grid"><article class="feature"><div class="feature-index">01 / PRIVACY</div><h3>Local by design</h3><p>Your images, labels, and models stay on the machine you control.</p></article><article class="feature"><div class="feature-index">02 / SPEED</div><h3>AI-assisted labeling</h3><p>Use inference and repeat annotations to move through large datasets faster.</p></article><article class="feature"><div class="feature-index">03 / PRECISION</div><h3>Box + polygon tools</h3><p>Edit coordinates directly with handles, zoom, visibility controls, and class management.</p></article><article class="feature"><div class="feature-index">04 / PIPELINE</div><h3>Train in context</h3><p>Go from annotations to Ultralytics training without leaving your workspace.</p></article><article class="feature"><div class="feature-index">05 / OUTPUT</div><h3>Flexible exports</h3><p>Prepare datasets in YOLO, COCO, or Pascal VOC formats for downstream tooling.</p></article><article class="feature"><div class="feature-index">06 / ACCESS</div><h3>Open and practical</h3><p>Run the tool on Linux or Windows with installation scripts included in the repo.</p></article></div></section>
+        <section class="section shell" id="workspace"><div class="workspace"><div class="workspace-panel" aria-label="Illustrated Boxify workspace preview"><div class="window-bar"><span>BOXIFY / WORKSPACE: CAT</span><span class="window-status">● READY</span></div><div class="workspace-map"><div class="map-col"><div class="map-title">Classes</div><div class="map-line"></div><div class="map-line short"></div><div class="map-line"></div><div class="map-line short"></div></div><div class="map-col map-canvas"><div class="map-title">Canvas / annotate</div><div class="map-box one"></div><div class="map-box two"></div></div><div class="map-col"><div class="map-title">Images</div><div class="map-line"></div><div class="map-line short"></div><div class="map-line"></div><div class="map-line short"></div></div></div></div><div class="workspace-copy"><div class="eyebrow">Inside the workspace</div><h2>A focused desk for repeated annotation work.</h2><ul><li><b>01</b><span>Keep class visibility, image navigation, and annotation state in one view.</span></li><li><b>02</b><span>Move, resize, and inspect objects directly on the image canvas.</span></li><li><b>03</b><span>Switch from labeling to inference or training when the dataset is ready.</span></li></ul></div></div></section>
+        <section class="section shell" id="install"><div class="install"><div class="eyebrow">Start locally</div><h2>Install once. Keep working.</h2><div class="install-grid"><div class="install-card"><h3>Linux</h3><pre>chmod +x boxify_linux_installation.bash
+./boxify_linux_installation.bash</pre></div><div class="install-card"><h3>Windows</h3><pre>1. Install VC_redist
+2. Run as administrator:
+   boxify_windows_installation.bat</pre></div></div></div></section>
+        <section class="final-cta shell"><h2>Build datasets with a little more control.</h2><a class="button button-primary" href="https://github.com/BoxifyAnnotationTools/Boxify" target="_blank" rel="noopener noreferrer">Open Boxify on GitHub <span>↗</span></a></section>
+    </main>
+    <footer><div class="shell"><span>© 2026 Boxify Annotation Tools</span><span>Built for computer vision &amp; AI</span></div></footer>
 </body>
 </html>

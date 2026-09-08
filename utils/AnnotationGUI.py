@@ -1543,7 +1543,10 @@ class AnnotationGUI:
             y1_disp = int(y1 * state.display_scale)
             x2_disp = int(x2 * state.display_scale)
             y2_disp = int(y2 * state.display_scale)
-            cv2.rectangle(img_array, (x1_disp, y1_disp), (x2_disp, y2_disp), color_rgb, 2)
+            self.draw_bbox_outline(img_array, x1_disp, y1_disp, x2_disp, y2_disp, color_rgb)
+
+            if i == state.selected_bbox:
+                self.draw_bbox_handles(img_array, x1_disp, y1_disp, x2_disp, y2_disp)
 
             label = cls
             (label_w, label_h), baseline = cv2.getTextSize(
@@ -1614,6 +1617,60 @@ class AnnotationGUI:
 
         # self.img_label.config(
         #     text=f"{state.current_index + 1} / {len(self.images)}")
+
+    def draw_bbox_handles(self, img_array, x1, y1, x2, y2):
+        """Draw a clear resize affordance around the selected bounding box."""
+        handle_size = max(6, min(10, int(9 * max(state.display_scale, 0.5))))
+        edge_color = (255, 255, 255)
+        accent_color = (0, 212, 255)
+
+        # Contrast outline makes the editable edge visible over any image.
+        cv2.rectangle(img_array, (x1, y1), (x2, y2), (0, 0, 0), 5)
+        cv2.rectangle(img_array, (x1, y1), (x2, y2), accent_color, 2)
+
+        handles = [
+            (x1, y1, 'corner'), ((x1 + x2) // 2, y1, 'edge'), (x2, y1, 'corner'),
+            (x2, (y1 + y2) // 2, 'edge'), (x2, y2, 'corner'),
+            ((x1 + x2) // 2, y2, 'edge'), (x1, y2, 'corner'),
+            (x1, (y1 + y2) // 2, 'edge')
+        ]
+        for hx, hy, handle_type in handles:
+            if handle_type == 'corner':
+                cv2.rectangle(
+                    img_array,
+                    (hx - handle_size, hy - handle_size),
+                    (hx + handle_size, hy + handle_size),
+                    edge_color, -1
+                )
+                cv2.rectangle(
+                    img_array,
+                    (hx - handle_size, hy - handle_size),
+                    (hx + handle_size, hy + handle_size),
+                    accent_color, 2
+                )
+            else:
+                cv2.circle(img_array, (hx, hy), handle_size - 1, edge_color, -1)
+                cv2.circle(img_array, (hx, hy), handle_size - 1, accent_color, 2)
+
+    def draw_bbox_outline(self, img_array, x1, y1, x2, y2, color):
+        """Draw an outlined bbox with lightweight corner accents."""
+        cv2.rectangle(img_array, (x1, y1), (x2, y2), (0, 0, 0), 4)
+        cv2.rectangle(img_array, (x1, y1), (x2, y2), color, 2)
+
+        corner_length = max(8, min(18, int(14 * max(state.display_scale, 0.5))))
+        accent = (255, 255, 255)
+        corner_segments = [
+            ((x1, y1), (x1 + corner_length, y1)),
+            ((x1, y1), (x1, y1 + corner_length)),
+            ((x2, y1), (x2 - corner_length, y1)),
+            ((x2, y1), (x2, y1 + corner_length)),
+            ((x1, y2), (x1 + corner_length, y2)),
+            ((x1, y2), (x1, y2 - corner_length)),
+            ((x2, y2), (x2 - corner_length, y2)),
+            ((x2, y2), (x2, y2 - corner_length))
+        ]
+        for start, end in corner_segments:
+            cv2.line(img_array, start, end, accent, 2)
 
     # ----------------------------------------------------------
     #  Info panel update
@@ -1838,19 +1895,33 @@ class AnnotationGUI:
                 y1_disp = int(y1 * state.display_scale)
                 x2_disp = int(x2 * state.display_scale)
                 y2_disp = int(y2 * state.display_scale)
-                handle_size = 10
+                handle_size = max(12, int(12 * max(state.display_scale, 0.5)))
+                mid_x = (x1_disp + x2_disp) // 2
+                mid_y = (y1_disp + y2_disp) // 2
                 if abs(x - x1_disp) < handle_size and abs(y - y1_disp) < handle_size:
                     state.resizing = True
                     state.resize_mode = 'tl'
+                elif abs(x - mid_x) < handle_size and abs(y - y1_disp) < handle_size:
+                    state.resizing = True
+                    state.resize_mode = 't'
                 elif abs(x - x2_disp) < handle_size and abs(y - y1_disp) < handle_size:
                     state.resizing = True
                     state.resize_mode = 'tr'
+                elif abs(x - x2_disp) < handle_size and abs(y - mid_y) < handle_size:
+                    state.resizing = True
+                    state.resize_mode = 'r'
                 elif abs(x - x1_disp) < handle_size and abs(y - y2_disp) < handle_size:
                     state.resizing = True
                     state.resize_mode = 'bl'
+                elif abs(x - mid_x) < handle_size and abs(y - y2_disp) < handle_size:
+                    state.resizing = True
+                    state.resize_mode = 'b'
                 elif abs(x - x2_disp) < handle_size and abs(y - y2_disp) < handle_size:
                     state.resizing = True
                     state.resize_mode = 'br'
+                elif abs(x - x1_disp) < handle_size and abs(y - mid_y) < handle_size:
+                    state.resizing = True
+                    state.resize_mode = 'l'
                 else:
                     self.moving = True
                 self.update_display()
@@ -1985,15 +2056,23 @@ class AnnotationGUI:
             if state.resize_mode == 'tl':
                 state.bboxes[state.selected_bbox][0] = min(x_orig, x2 - min_size)
                 state.bboxes[state.selected_bbox][1] = min(y_orig, y2 - min_size)
+            elif state.resize_mode == 't':
+                state.bboxes[state.selected_bbox][1] = min(y_orig, y2 - min_size)
             elif state.resize_mode == 'tr':
                 state.bboxes[state.selected_bbox][2] = max(x_orig, x1 + min_size)
                 state.bboxes[state.selected_bbox][1] = min(y_orig, y2 - min_size)
+            elif state.resize_mode == 'r':
+                state.bboxes[state.selected_bbox][2] = max(x_orig, x1 + min_size)
             elif state.resize_mode == 'bl':
                 state.bboxes[state.selected_bbox][0] = min(x_orig, x2 - min_size)
+                state.bboxes[state.selected_bbox][3] = max(y_orig, y1 + min_size)
+            elif state.resize_mode == 'b':
                 state.bboxes[state.selected_bbox][3] = max(y_orig, y1 + min_size)
             elif state.resize_mode == 'br':
                 state.bboxes[state.selected_bbox][2] = max(x_orig, x1 + min_size)
                 state.bboxes[state.selected_bbox][3] = max(y_orig, y1 + min_size)
+            elif state.resize_mode == 'l':
+                state.bboxes[state.selected_bbox][0] = min(x_orig, x2 - min_size)
             self.update_display()
 
     def on_mouse_up(self, event):
@@ -2108,7 +2187,10 @@ class AnnotationGUI:
                 y1_disp = int(y1 * state.display_scale)
                 x2_disp = int(x2 * state.display_scale)
                 y2_disp = int(y2 * state.display_scale)
-                cv2.rectangle(img_array, (x1_disp, y1_disp), (x2_disp, y2_disp), color_rgb, 2)
+                self.draw_bbox_outline(img_array, x1_disp, y1_disp, x2_disp, y2_disp, color_rgb)
+
+                if i == state.selected_bbox:
+                    self.draw_bbox_handles(img_array, x1_disp, y1_disp, x2_disp, y2_disp)
                 
                 # Draw class label text if enabled
                 if state.show_bbox_text:
