@@ -185,8 +185,6 @@ For training failures caused by limited memory, try a smaller image size, a smal
 
 ![Boxify annotation interface](assets/visualize.png)
 
-![Boxify live inference](assets/stream.png)
-
 ## Contributing
 
 Issues, documentation improvements, bug fixes, and feature contributions are welcome.
