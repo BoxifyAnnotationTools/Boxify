@@ -12,7 +12,7 @@ import sys
 import subprocess
 import shutil
 
-from .config import (CLASSLIST, state, input_folder, colorsPalette, output_folder, 
+from .config import (CLASSLIST, state, input_folder, colorsPalette, vocdataset_folder,
                    class_manager, inference_root, model_path, model_folder, export_model_folder, export_dataset_folder, workspaceName)
 from .file_handler import load_annotation_local
 from .polygon_manager import polygon_manager
@@ -24,6 +24,7 @@ from . import export as export_module
 import threading
 import webbrowser
 import json
+import xml.etree.ElementTree as ET
 from datetime import datetime
 import random
 import time
@@ -140,8 +141,7 @@ class AnnotationGUI:
         """Bind all keyboard shortcuts"""
         self.root.bind('<Left>', lambda e: self.prev_image())
         self.root.bind('<Right>', lambda e: self.next_image())
-        self.root.bind('a', lambda e: self.prev_image())
-        self.root.bind('d', lambda e: self.next_image())
+        self.root.bind_all('<KeyPress>', self.handle_global_key)
         self.root.bind('r', lambda e: self.delete_selected_bbox())
         self.root.bind('s', lambda e: self.change_class_selected())
         self.root.bind('t', lambda e: self.start_training())
@@ -158,6 +158,19 @@ class AnnotationGUI:
         
         for i in range(9):
             self.root.bind(str(i+1), lambda e, idx=i: self.select_class_by_number(idx))
+
+    def handle_global_key(self, event):
+        """Handle navigation keys regardless of which main widget has focus."""
+        if event.widget.winfo_class() in ('Entry', 'TEntry', 'Spinbox', 'Text'):
+            return
+
+        key = event.keysym.lower()
+        if key == 'a':
+            self.prev_image()
+            return 'break'
+        if key == 'd':
+            self.next_image()
+            return 'break'
 
     def on_escape_pressed(self):
         if self.mask_mode:
@@ -409,11 +422,6 @@ class AnnotationGUI:
                   C_CARD2, C_TXT1, font_size=9).pack(
             side=tk.LEFT, padx=(0, 2), pady=12, ipady=5, ipadx=10)
 
-        self.img_label = tk.Label(nav, text="1 / 1",
-                                   bg=C_PANEL, fg=C_ACCENT,
-                                   font=('Segoe UI', 12, 'bold'), width=7)
-        self.img_label.pack(side=tk.LEFT, padx=6)
-
         self._btn(nav, "NEXT  ▶", self.next_image,
                   C_CARD2, C_TXT1, font_size=9).pack(
             side=tk.LEFT, padx=(2, 0), pady=12, ipady=5, ipadx=10)
@@ -460,15 +468,10 @@ class AnnotationGUI:
         auto_blk = tk.Frame(header, bg=C_PANEL)
         auto_blk.pack(side=tk.LEFT, padx=4)
 
-        self.auto_annotate_label = tk.Label(auto_blk, text="🤖 Auto Annotate",
-                                             bg=C_PANEL, fg=C_TXT3,
-                                             font=('Segoe UI', 7))
-        self.auto_annotate_label.pack(anchor='w', padx=6, pady=(12, 1))
-
-        self.auto_annotate_btn = self._btn(auto_blk, "▶  Start Auto",
+        self.auto_annotate_btn = self._btn(auto_blk, "Auto Annotate",
                                             self.toggle_auto_annotate,
                                             '#0e2218', C_GREEN, font_size=8)
-        self.auto_annotate_btn.pack(padx=6, pady=(0, 12), ipady=4, ipadx=8)
+        self.auto_annotate_btn.pack(padx=2, pady=2, ipady=1, ipadx=1)
 
         # — Right-side status badges —
         status_panel = tk.Frame(header, bg=C_PANEL)
@@ -485,7 +488,7 @@ class AnnotationGUI:
                                      bg=C_CARD, fg=C_TXT3, **badge_cfg)
         self.force_label.pack(side=tk.RIGHT, padx=3, pady=14)
 
-        self.auto_label = tk.Label(status_panel, text="Auto inference: OFF",
+        self.auto_label = tk.Label(status_panel, text="Auto Annotate: OFF",
                                     bg=C_CARD, fg=C_TXT3, **badge_cfg)
         self.auto_label.pack(side=tk.RIGHT, padx=3, pady=14)
 
@@ -788,6 +791,183 @@ class AnnotationGUI:
     # ----------------------------------------------------------
     #  Export Dataset UI
     # ----------------------------------------------------------
+    def _find_workspace_images(self, image_exts):
+        """Collect images from all indexed datasets for the active workspace."""
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        datasets_root = os.path.join(project_root, 'datasetsInput')
+        prefix = workspaceName + '-'
+        records = []
+
+        if not os.path.isdir(datasets_root):
+            return records
+
+        folders = sorted(
+            folder for folder in os.listdir(datasets_root)
+            if folder.startswith(prefix) and os.path.isdir(os.path.join(datasets_root, folder))
+        )
+        for folder in folders:
+            folder_path = os.path.join(datasets_root, folder)
+            for filename in sorted(os.listdir(folder_path)):
+                if filename.lower().endswith(image_exts):
+                    records.append({
+                        'source': os.path.join(folder_path, filename),
+                        'filename': filename,
+                        'base': os.path.splitext(filename)[0]
+                    })
+        return records
+
+    def _read_coco_annotations(self, xml_path, image_width, image_height, categories):
+        """Convert Boxify VOC objects into COCO annotation dictionaries."""
+        annotations = []
+        if not os.path.exists(xml_path):
+            return annotations
+
+        try:
+            root = ET.parse(xml_path).getroot()
+        except (ET.ParseError, OSError) as exc:
+            print(f"[COCO] Could not read {xml_path}: {exc}")
+            return annotations
+
+        for obj in root.findall('object'):
+            name_elem = obj.find('name')
+            class_name = (name_elem.text or '').strip() if name_elem is not None else ''
+            if not class_name or class_name not in categories:
+                continue
+
+            polygon = obj.find('polygon')
+            segmentation = []
+            points = []
+            if polygon is not None:
+                point_elements = polygon.findall('point')
+                if point_elements:
+                    for point in point_elements:
+                        x_elem = point.find('x')
+                        y_elem = point.find('y')
+                        if x_elem is not None and y_elem is not None:
+                            points.append((float(x_elem.text), float(y_elem.text)))
+                else:
+                    index = 1
+                    while polygon.find(f'x{index}') is not None and polygon.find(f'y{index}') is not None:
+                        points.append((
+                            float(polygon.find(f'x{index}').text),
+                            float(polygon.find(f'y{index}').text)
+                        ))
+                        index += 1
+
+            if len(points) >= 3:
+                points = [
+                    (max(0.0, min(float(image_width), x)),
+                     max(0.0, min(float(image_height), y)))
+                    for x, y in points
+                ]
+                segmentation = [[coord for point in points for coord in point]]
+                xmin = min(point[0] for point in points)
+                ymin = min(point[1] for point in points)
+                xmax = max(point[0] for point in points)
+                ymax = max(point[1] for point in points)
+                area = 0.5 * abs(sum(
+                    points[index][0] * points[(index + 1) % len(points)][1] -
+                    points[(index + 1) % len(points)][0] * points[index][1]
+                    for index in range(len(points))
+                ))
+            else:
+                bbox = obj.find('bndbox')
+                if bbox is None:
+                    continue
+                xmin = float(bbox.findtext('xmin', '0'))
+                ymin = float(bbox.findtext('ymin', '0'))
+                xmax = float(bbox.findtext('xmax', '0'))
+                ymax = float(bbox.findtext('ymax', '0'))
+                area = max(0.0, xmax - xmin) * max(0.0, ymax - ymin)
+
+            xmin = max(0.0, min(float(image_width), xmin))
+            ymin = max(0.0, min(float(image_height), ymin))
+            xmax = max(xmin, min(float(image_width), xmax))
+            ymax = max(ymin, min(float(image_height), ymax))
+            annotations.append({
+                'category_id': categories[class_name],
+                'bbox': [xmin, ymin, xmax - xmin, ymax - ymin],
+                'area': area,
+                'segmentation': segmentation,
+                'iscrowd': 0
+            })
+
+        return annotations
+
+    def _export_coco_dataset(self, target, train_pct, valid_pct, image_exts):
+        """Export indexed workspace images and VOC annotations as COCO JSON."""
+        records = self._find_workspace_images(image_exts)
+        if not records:
+            raise ValueError(f'No images found for workspace {workspaceName} in datasetsInput')
+
+        random.shuffle(records)
+        total = len(records)
+        train_count = int(round(total * (train_pct / 100.0)))
+        valid_count = int(round(total * (valid_pct / 100.0)))
+        if train_count + valid_count > total:
+            valid_count = max(0, total - train_count)
+
+        splits = {
+            'train': records[:train_count],
+            'val': records[train_count:train_count + valid_count],
+            'test': records[train_count + valid_count:]
+        }
+        categories = {name: index + 1 for index, name in enumerate(CLASSLIST)}
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        xml_root = os.path.join(project_root, 'vocdataset', workspaceName)
+
+        for split_name, split_records in splits.items():
+            image_dir = os.path.join(target, 'images', split_name)
+            os.makedirs(image_dir, exist_ok=True)
+            coco = {
+                'info': {'description': f'Boxify {workspaceName} dataset'},
+                'licenses': [],
+                'images': [],
+                'annotations': [],
+                'categories': [
+                    {'id': category_id, 'name': name, 'supercategory': 'object'}
+                    for name, category_id in categories.items()
+                ]
+            }
+            annotation_id = 1
+
+            for image_id, record in enumerate(split_records, start=1):
+                try:
+                    with Image.open(record['source']) as image:
+                        image_width, image_height = image.size
+                    output_name = record['filename']
+                    destination = os.path.join(image_dir, output_name)
+                    if os.path.exists(destination):
+                        output_name = f"{os.path.basename(os.path.dirname(record['source']))}_{record['filename']}"
+                        destination = os.path.join(image_dir, output_name)
+                    shutil.copy2(record['source'], destination)
+                except (OSError, ValueError) as exc:
+                    print(f"[COCO] Skipping {record['source']}: {exc}")
+                    continue
+
+                coco['images'].append({
+                    'id': image_id,
+                    'file_name': output_name,
+                    'width': image_width,
+                    'height': image_height
+                })
+
+                xml_path = os.path.join(xml_root, record['base'] + '.xml')
+                for annotation in self._read_coco_annotations(
+                        xml_path, image_width, image_height, categories):
+                    annotation['id'] = annotation_id
+                    annotation['image_id'] = image_id
+                    coco['annotations'].append(annotation)
+                    annotation_id += 1
+
+            annotation_dir = os.path.join(target, 'annotations')
+            os.makedirs(annotation_dir, exist_ok=True)
+            json_path = os.path.join(annotation_dir, f'instances_{split_name}.json')
+            with open(json_path, 'w', encoding='utf-8') as json_file:
+                json.dump(coco, json_file, indent=2)
+
+        return target
+
     def show_export_dataset_dialog(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Export Dataset")
@@ -808,7 +988,7 @@ class AnnotationGUI:
         # Format dropdown
         tk.Label(body, text="Format:", bg=C_CARD, fg=C_TXT1).pack(anchor='w')
         fmt_var = tk.StringVar(value='YOLO')
-        fmt_combo = ttk.Combobox(body, values=["YOLO", "Pascal VOC (XML)"], state='readonly', font=('Segoe UI', 10))
+        fmt_combo = ttk.Combobox(body, values=["YOLO", "Pascal VOC (XML)", "COCO"], state='readonly', font=('Segoe UI', 10))
         fmt_combo.set('YOLO')
         fmt_combo.pack(fill=tk.X, pady=(0,8))
 
@@ -1097,12 +1277,15 @@ class AnnotationGUI:
                             except Exception:
                                 pass
                             base = os.path.splitext(os.path.basename(img_path))[0]
-                            xml_path = os.path.join(output_folder, base + '.xml')
+                            xml_path = os.path.join(vocdataset_folder, base + '.xml')
                             if os.path.exists(xml_path):
                                 try:
                                     shutil.copy2(xml_path, os.path.join(out_dir, base + '.xml'))
                                 except Exception:
                                     pass
+
+                elif fmt == 'COCO':
+                    self._export_coco_dataset(target, t, v, image_exts)
 
                 else:
                     messagebox.showerror('Format not supported', f'Unknown format: {fmt}', parent=dialog)
@@ -1429,8 +1612,8 @@ class AnnotationGUI:
         self.canvas.create_image(self.canvas_offset_x, self.canvas_offset_y,
                                   anchor=tk.NW, image=self.photo)
 
-        self.img_label.config(
-            text=f"{state.current_index + 1} / {len(self.images)}")
+        # self.img_label.config(
+        #     text=f"{state.current_index + 1} / {len(self.images)}")
 
     # ----------------------------------------------------------
     #  Info panel update
@@ -1460,7 +1643,7 @@ class AnnotationGUI:
 
         annotated_count = 0
         for img in self.images:
-            xml_path = os.path.join(output_folder, os.path.splitext(img)[0] + ".xml")
+            xml_path = os.path.join(vocdataset_folder, os.path.splitext(img)[0] + ".xml")
             if os.path.exists(xml_path):
                 annotated_count += 1
 
@@ -1469,6 +1652,10 @@ class AnnotationGUI:
         # Build info text
         sep = "─" * 28
         info = f"{sep}\n"
+        info += f" CURRENT IMAGE\n"
+        info += f"{sep}\n"
+        info += f" {state.current_index + 1} / {len(self.images)}\n"
+
         info += f" DATASET PROGRESS\n"
         info += f"{sep}\n"
         info += f" 📊 {annotated_count} / {len(self.images)} annotated\n"

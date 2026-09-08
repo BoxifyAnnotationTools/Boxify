@@ -1,24 +1,26 @@
-# Ignore everything
-*
+boxify/*
+!boxify/.gitignore
 
-# Allow folders (biar bisa diakses)
-!exportTools/
-!utils/
-!icon/
-!assets/
-!VC_redist/
+exportTools/*
+!exportTools/.gitignore
 
-# Allow folder content
-!exportTools/**
-!utils/**
-!icon/**
-!assets/**
-!VC_redist/**
+datasetsInput/*
+!datasetsInput/.gitignore
 
-# Allow specific files
-!.gitignore
-!README.md
-!LICENSE
-!visualize.png
-!boxify_linux_installation.bash
-!boxify_windows_installation.bat
+configs/*
+!configs/.gitignore
+
+export dataset/*
+!export dataset/.gitignore
+
+export model/*
+!export model/.gitignore
+
+inference/*
+!inference/.gitignore
+
+models/*
+!models/.gitignore
+
+vocdataset/*
+!vocdataset/.gitignore

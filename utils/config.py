@@ -111,7 +111,7 @@ if "-" in folder_name:
 
 
 # ======== OUTPUT AND MODEL PATHS ========
-output_folder = os.path.join(BASE_DIR, "output", workspaceName)
+vocdataset_folder = os.path.join(BASE_DIR, "vocdataset", workspaceName)
 
 inference_root = os.path.join(BASE_DIR, "inference", workspaceName)
 inference_images = os.path.join(inference_root, "images")
@@ -124,7 +124,7 @@ export_dataset_folder = os.path.join(BASE_DIR, "export dataset", workspaceName)
 
 
 # ======== CREATE REQUIRED DIRECTORIES ========
-for d in [output_folder, inference_images, inference_labels, model_folder, export_model_folder, export_dataset_folder]:
+for d in [vocdataset_folder, inference_images, inference_labels, model_folder, export_model_folder, export_dataset_folder]:
     os.makedirs(d, exist_ok=True)
 
 

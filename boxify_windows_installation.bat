@@ -93,15 +93,30 @@ if %ERRORLEVEL% equ 0 (
     echo [!] Windows ARM detected.
 )
 
-:: Detect NVIDIA GPU
-powershell -NoProfile -Command "$gpu = Get-CimInstance Win32_VideoController; if($gpu.Name -match 'NVIDIA|RTX|GTX|TESLA'){ exit 0 } else { exit 1 }"
+:: Detect NVIDIA GPU through the NVIDIA driver utility.
+:: This is more reliable than matching localized WMI adapter names.
+where nvidia-smi >nul 2>&1
 
 if not errorlevel 1 (
-    set GPU_TYPE=NVIDIA
-    echo [OK] NVIDIA GPU detected.
+    nvidia-smi -L >nul 2>&1
+    if not errorlevel 1 (
+        set GPU_TYPE=NVIDIA
+        echo [OK] NVIDIA GPU detected through nvidia-smi.
+        nvidia-smi --query-gpu=name --format=csv,noheader,nounits 2>nul
+    ) else (
+        echo [!] nvidia-smi is installed but no usable NVIDIA GPU was reported.
+        echo [*] CPU mode will be used.
+    )
 ) else (
-    echo [!] NVIDIA GPU not detected.
-    echo [*] CPU mode will be used.
+    :: Fallback for systems where the NVIDIA utility is unavailable.
+    powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; $gpu = Get-CimInstance Win32_VideoController; if($gpu.Name -match 'NVIDIA|RTX|GTX|TESLA'^){ exit 0 } else { exit 1 }"
+    if not errorlevel 1 (
+        set GPU_TYPE=NVIDIA
+        echo [OK] NVIDIA GPU detected through Windows device information.
+    ) else (
+        echo [!] NVIDIA GPU not detected.
+        echo [*] CPU mode will be used.
+    )
 )
 
 :: =========================================================

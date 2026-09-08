@@ -1,256 +1,204 @@
-<h1 align="center">Boxify</h1>
-<p align="center"><strong>Local Annotation Tool</strong></p>
+# Boxify
 
-<p align="center">
-  <img src="assets/boxify.png" width="200" alt="Boxify Icon"/>
-</p>
+**Boxify is a local computer vision annotation tool for creating object detection and image segmentation datasets.** It runs on your own computer, supports bounding boxes and polygons, and can use Ultralytics YOLO models for inference and training.
 
-<hr/>
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey)](boxify_linux_installation.bash)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-lightgrey)](boxify_windows_installation.bat)
 
-<h2>🚀 Overview</h2>
+Boxify is designed for individuals and teams that need a private, offline-first workflow for labeling image datasets without uploading images to a third-party service.
 
-<h3>What is Boxify?</h3>
-<p>
-Boxify is a local annotation tool designed to help data annotators label image datasets efficiently.
-It is built for users who want a standard annotation workflow that runs offline and supports custom AI models.
-</p>
+![Boxify annotation interface](assets/visualize.png)
 
-<ul>
-  <li>Runs fully locally</li>
-  <li>Supports custom-trained models</li>
-  <li>Speeds up annotation with automation</li>
-  <li>Tes your models directly in your computer</li>
-</ul>
+## Features
 
-<hr/>
+- Local annotation workflow with no required cloud account
+- Bounding box annotation for object detection
+- Polygon annotation for image segmentation
+- Automatic annotation with an Ultralytics YOLO model
+- Model training from the annotation workspace
+- NVIDIA CUDA and CPU workflows, depending on the installed PyTorch build
+- Class management, visibility toggles, image search, zoom, and multi-selection
+- Repeat annotations from the previous image
+- ZeroFill masking for removing sensitive image regions locally
+- Dataset export for YOLO and Pascal VOC XML
+- Live camera or video inference through Streamlit
 
-<h2>✅ Key Features</h2>
+## Requirements
 
-<h3>Core Capabilities</h3>
-<ul>
-  <li>Fully local (no cloud, full privacy)</li>
-  <li>Custom model support (Ultralytics)</li>
-  <li>Auto annotation (bbox & polygon)</li>
-</ul>
+### Linux
 
-<h3>Productivity</h3>
-<ul>
-  <li>Fast setup (~10 minutes)</li>
-  <li>Smart polygon tools (snapping & refinement)</li>
-  <li>Repeat annotation support</li>
-</ul>
+- Debian/Ubuntu/Mint, Fedora/RHEL/CentOS, or Arch/Manjaro
+- Python **3.11.9** for the pinned installer
+- Tkinter and Python virtual-environment support
+- Internet access during installation
+- An NVIDIA driver and `nvidia-smi` for the CUDA PyTorch path
 
-<h3>Compatibility</h3>
-<ul>
-  <li>YOLO & Pascal VOC export</li>
-  <li>Supports Detection & Segmentation</li>
-</ul>
+### Windows
 
-<hr/>
+- 64-bit Windows is recommended
+- Python 3.12 is installed by the Windows installer when needed
+- Microsoft Visual C++ Redistributable from [`VC_redist/`](VC_redist/)
+- Internet access during installation
 
-<h2>⚙️ Installation</h2>
-<h3>Tkinter and Python must match in version.</h3>
-<h4>Linux</h4>
-<pre>
+The application can run on CPU. NVIDIA GPU support requires a compatible NVIDIA driver and a PyTorch build with CUDA support.
+
+## Installation
+
+### Linux
+
+Run these commands from the cloned repository:
+
+```bash
 chmod +x boxify_linux_installation.bash
 ./boxify_linux_installation.bash
-chmod +x Boxify.desktop
-</pre>
+```
 
-<p>Launch by double-clicking the Boxify icon.</p>
+The installer asks for your `sudo` password at the beginning, installs Python 3.11.9 with Tkinter and venv support, creates the `boxify/` virtual environment, installs dependencies, and creates a desktop launcher.
 
-<h4>Windows</h4>
-<pre>
-1. Install Microsoft Visual C++ Redistributable from the "VC_redist" folder
-   (choose the installer that matches your system architecture: x64, x86, or ARM64).
+If your distribution cannot provide Python **3.11.9** exactly, the installer stops instead of silently creating an environment with a different Python version.
 
-2. In File Explorer, right-click "boxify_windows_installation.bat"
-   and select "Run as administrator".
-</pre>
+### Windows
 
-<p>After installation, double-click the Boxify icon.</p>
+1. Open [`VC_redist/`](VC_redist/) and install the package matching your system architecture.
+2. Right-click [`boxify_windows_installation.bat`](boxify_windows_installation.bat) and choose **Run as administrator**.
+3. Follow the installer prompts.
+4. Open the generated `Boxify.lnk` shortcut.
 
-<hr/>
+The Windows installer checks for an NVIDIA GPU through `nvidia-smi` and uses Windows device information as a fallback. GPU detection does not guarantee that the installed PyTorch package has CUDA enabled.
 
-<h2>🖥️ Interface</h2>
+## Running Boxify Manually
 
-<p align="center">
-  <img src="assets/visualize.png" alt="Boxify UI"/>
-</p>
-<p align="center">
-  <img src="assets/stream.png" alt="Boxify UI"/>
-</p>
+### Linux
 
-<hr/>
+```bash
+source boxify/bin/activate
+python -u utils/Annotator.py
+```
 
-<h2>⌨️ Controls</h2>
+### Windows
 
-<h3>Navigation</h3>
-<table>
-<tr><th>Key</th><th>Action</th></tr>
-<tr><td>A / ←</td><td>Previous image</td></tr>
-<tr><td>D / →</td><td>Next image</td></tr>
-<tr><td>Delete</td><td>Remove image</td></tr>
-</table>
+```bat
+venv\Scripts\activate
+python utils\Annotator.py
+```
 
-<h3>Annotation Mode</h3>
-<table>
-<tr><th>Key</th><th>Action</th></tr>
-<tr><td>M</td><td>Toggle mode</td></tr>
-<tr><td>B</td><td>Force bbox mode</td></tr>
-<tr><td>F</td><td>Auto annotation</td></tr>
-<tr><td>P</td><td>Inference on navigation</td></tr>
-</table>
+## Keyboard Shortcuts
 
-<h3>Drawing & Editing</h3>
-<table>
-<tr><th>Key</th><th>Action</th></tr>
-<tr><td>Click</td><td>Add point / select bbox</td></tr>
-<tr><td>Double Click / Enter</td><td>Finish polygon</td></tr>
-<tr><td>Right Click</td><td>Undo last point</td></tr>
-<tr><td>Esc</td><td>Cancel / exit</td></tr>
-</table>
+| Key | Action |
+| --- | --- |
+| `A` / `Left Arrow` | Previous image |
+| `D` / `Right Arrow` | Next image |
+| `Delete` | Delete the current image |
+| `M` | Toggle bounding box and polygon mode |
+| `B` | Force a new bounding box |
+| `F` | Start or stop auto annotation |
+| `P` | Toggle inference while navigating |
+| `G` | Run inference on the current image |
+| `T` | Open the training workflow |
+| `S` | Change the selected annotation class |
+| `R` | Delete the selected annotation |
+| `E` | Repeat annotations from the previous image |
+| `Esc` | Cancel the current operation or exit |
 
-<h3>Manage Annotations</h3>
-<table>
-<tr><th>Key</th><th>Action</th></tr>
-<tr><td>S</td><td>Change class</td></tr>
-<tr><td>R</td><td>Delete annotation</td></tr>
-<tr><td>E</td><td>Repeat annotation</td></tr>
-</table>
+In polygon mode, click to add points, double-click or press `Enter` to finish, and right-click a point to delete it.
 
-<h3>AI & Training</h3>
-<table>
-<tr><th>Key</th><th>Action</th></tr>
-<tr><td>G</td><td>Run inference</td></tr>
-<tr><td>T</td><td>Start training (GPU)</td></tr>
-</table>
+## Workspace Structure
 
-<hr/>
+Boxify keeps data, annotations, models, and inference files separated by workspace:
 
-<h2>📁 Project Structure</h2>
+```text
+datasetsInput/<workspace>-<index>/   Input images for annotation
+vocdataset/<workspace>/              Pascal VOC XML annotations
+inference/<workspace>/               YOLO images, labels, and data.yaml
+models/<workspace>/                  Trained YOLO models
+configs/<workspace>.txt              Workspace class configuration
+export dataset/<workspace>/          Exported datasets
+export model/<workspace>/            Exported model files
+```
 
-<h3>Basic Concept</h3>
-<p>You can use your own data as long as the folder structure is correct.</p>
-<p>Boxify loads image annotations from XML format. If you want to continue an existing project using Boxify, make sure your images are placed in <code>datasetsInput/{workspace}</code>, the corresponding XML annotations are stored in <code>output/{workspace}</code>, and your model is stored in <code>model/{workspace}</code>.</p>
+Example workspace:
 
-<pre>
-datasetsInput/{workspace}-{index}
-output/{workspace}
-inference/{workspace}
-model/{workspace} => # Only accept .pt model (YOLO Model), renamed as modelAssistant.pt
-config/{workspace}.txt
-</pre>
+```text
+datasetsInput/cat-2/
+vocdataset/cat/
+inference/cat/
+models/cat/
+configs/cat.txt
+```
 
-<h3>Example (workspace: person)</h3>
-<pre>
-datasetsInput/person or person-1 (for indexing workspace example)
-output/person
-inference/person
-model/person
-config/person.txt
-</pre>
+## Annotation Formats
 
-<h3>Notes</h3>
-<ul>
-  <li>Each workspace is isolated</li>
-  <li>Supports dataset indexing (-1, -2, etc.)</li>
-  <li>XML → output/</li>
-  <li>YOLO → inference/</li>
-  <li>Models stored per workspace</li>
-</ul>
+Boxify supports:
 
-<hr/>
+- Bounding boxes for YOLO object detection datasets
+- Polygons for segmentation workflows
+- Pascal VOC XML annotations in the `vocdataset/` workspace folder
+- YOLO labels and dataset configuration in the `inference/` workspace folder
+- COCO JSON YOLO exports with bounding boxes and polygon segmentations
 
-<h2>💾 Annotation Format</h2>
+## Exporting a Dataset
 
-<h3>XML</h3>
-<pre>
-output/{workspace}/*.xml
-</pre>
+Use the **Export Dataset** action in the application to export YOLO, Pascal VOC, or COCO data with train, validation, and test splits.
 
-<pre>
-&lt;object&gt;
-  &lt;name&gt;vehicle&lt;/name&gt;
-  &lt;type&gt;polygon&lt;/type&gt;
-  &lt;polygon&gt;
-    &lt;point&gt;&lt;x&gt;50&lt;/x&gt;&lt;y&gt;100&lt;/y&gt;&lt;/point&gt;
-  &lt;/polygon&gt;
-&lt;/object&gt;
-</pre>
+COCO exports use this structure:
 
-<h3>YOLO</h3>
-<pre>
-inference/{workspace}
-</pre>
+```text
+<workspace>/
+├── images/
+│   ├── train/
+│   ├── val/
+│   └── test/
+└── annotations/
+	├── instances_train.json
+	├── instances_val.json
+	└── instances_test.json
+```
 
-<hr/>
+The COCO exporter reads images from all indexed folders matching `datasetsInput/<workspace>-<index>/` and annotations from `vocdataset/<workspace>/`.
 
-<h2>📤 Export</h2>
+The standalone YOLOX conversion utility can be run with:
 
-<p>Export dataset for YOLOX:</p>
-<pre>
+```bash
 python exportTools/export2YOLOX.py
-</pre>
+```
 
-<hr/>
+## GPU and PyTorch Troubleshooting
 
-<hr/>
+Check the NVIDIA driver first:
 
-<h2>🤝 Contributing</h2>
+```bash
+nvidia-smi
+```
 
-<h3>How to Contribute</h3>
-<p>
-I am very open to anyone who wants to help make Boxify better! To keep the codebase organized and stable, I follow a standard branch-based workflow. Please follow these steps to contribute:
-</p>
+Then check whether the active Python environment can use CUDA:
 
-<ol>
-  <li><strong>Fork the Repository:</strong> Click the <code>Fork</code> button at the top right of this page to create a copy of the project in your own GitHub account.</li>
-  <li><strong>Clone the Project:</strong> Download the code from your forked repository to your local machine.
-    <pre>git clone https://github.com/BoxifyAnnotationTools/Boxify.git</pre>
-  </li>
-  <li><strong>Create a New Branch:</strong> Avoid making changes directly to the <code>main</code> branch. Create a sub-branch for your feature or bug fix.
-    <pre>git checkout -b feature/your-feature-name</pre>
-    <em>Example: <code>git checkout -b feature/dark-mode-support</code> or <code>fix/zoom-issue</code></em>
-  </li>
-  <li><strong>Commit Your Changes:</strong> Save your progress with a clear and descriptive commit message.
-    <pre>git commit -m "Add: support for Dark Mode interface"</pre>
-  </li>
-  <li><strong>Push to GitHub:</strong> Upload your new branch to your forked repository.
-    <pre>git push origin feature/your-feature-name</pre>
-  </li>
-  <li><strong>Create a Pull Request:</strong> Go to the original Boxify repository. You will see a notification to create a <code>Pull Request</code>. Explain your changes and submit it for review.</li>
-</ol>
+```bash
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.version.cuda)"
+```
 
-<h3>Areas for Contribution</h3>
-<ul>
-  <li><strong>Code Refactoring & Optimization:</strong> Improving logic efficiency, performance, and overall code quality.</li>
-  <li><strong>Feature Development:</strong> Implementing new tools, automation capabilities, or user-requested features.</li>
-  <li><strong>Bug Fixes & Documentation:</strong> Resolving issues and improving the clarity of installation or usage guides.</li>
-</ul>
+`nvidia-smi` detecting a GPU does not mean that PyTorch has CUDA enabled. The driver, PyTorch build, CUDA runtime, and GPU architecture must be compatible.
 
-<p><strong>Note:</strong> Please ensure your code is tested locally before submitting a Pull Request to maintain the stability of the core application.</p>
+For training failures caused by limited memory, try a smaller image size, a smaller batch size, a smaller model, or a smaller dataset split.
 
-<hr/>
+## Screenshots
 
-<h2>⚠️ Known Issues</h2>
+![Boxify annotation interface](assets/visualize.png)
 
-<h3>RuntimeError: ran out of input</h3>
+![Boxify live inference](assets/stream.png)
 
-<h4>Causes</h4>
-<ul>
-  <li>Low VRAM</li>
-  <li>Unsupported GPU features</li>
-  <li>Memory fragmentation</li>
-</ul>
+## Contributing
 
-<h4>Solutions</h4>
-<ul>
-  <li>Reduce image size</li>
-  <li>Lower batch size</li>
-  <li>Disable AMP</li>
-  <li>Use smaller models</li>
-  <li>Check dataset integrity</li>
-</ul>
+Issues, documentation improvements, bug fixes, and feature contributions are welcome.
 
-<p><strong>Note:</strong> Usually caused by hardware limitations.</p>
+```bash
+git clone https://github.com/BoxifyAnnotationTools/Boxify.git
+cd Boxify
+git checkout -b feature/your-feature-name
+```
+
+Before opening a pull request, test the installer or application flow affected by your change and describe the platform used.
+
+## License
+
+Boxify is released under the [MIT License](LICENSE).

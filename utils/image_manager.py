@@ -3,7 +3,7 @@ Image navigation and management
 """
 import os
 import copy
-from .config import state, output_folder, inference_images, inference_labels, input_folder
+from .config import state, vocdataset_folder, inference_images, inference_labels, input_folder
 import cv2
 import numpy as np
 def repeat_last_annotations(images, current_index, classList):
@@ -32,7 +32,7 @@ def delete_current_image(images, current_index):
 
     # Paths to all related files
     input_path = os.path.join(input_folder, img_name)
-    xml_path = os.path.join(output_folder, base_name + ".xml")
+    xml_path = os.path.join(vocdataset_folder, base_name + ".xml")
     infer_img_path = os.path.join(inference_images, img_name)
     infer_label_path = os.path.join(inference_labels, base_name + ".txt")
 

@@ -6,7 +6,7 @@ import os
 import shutil
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
-from .config import output_folder, inference_labels, inference_images, input_folder, CLASSLIST, state
+from .config import vocdataset_folder, inference_labels, inference_images, input_folder, CLASSLIST, state
 
 def prettify_xml(elem):
     """Convert XML to pretty-printed string"""
@@ -14,7 +14,7 @@ def prettify_xml(elem):
 
 def save_pascal_voc(img_name, img_shape):
     """Save annotations in Pascal VOC format (bboxes and polygons)"""
-    xml_path = os.path.join(output_folder, os.path.splitext(img_name)[0] + ".xml")
+    xml_path = os.path.join(vocdataset_folder, os.path.splitext(img_name)[0] + ".xml")
     ann = ET.Element("annotation")
     ET.SubElement(ann, "folder").text = "dataset"
     ET.SubElement(ann, "filename").text = img_name
@@ -176,7 +176,7 @@ def load_annotation_local(img_name_local):
     - Our format: <type>polygon</type> with <point><x/><y/></point>
     - Roboflow format: <polygon><x1/><y1/><x2/><y2/>... (no <type> element)
     """
-    xml_path = os.path.join(output_folder, os.path.splitext(img_name_local)[0] + ".xml")
+    xml_path = os.path.join(vocdataset_folder, os.path.splitext(img_name_local)[0] + ".xml")
     if not os.path.exists(xml_path):
         return [], []  # Return empty bboxes and polygons
     
@@ -256,17 +256,17 @@ def detect_dataset_has_polygons():
     Check if dataset has any polygon annotations
     Returns: True if any polygon found, False if only bboxes
     """
-    if not os.path.exists(output_folder):
+    if not os.path.exists(vocdataset_folder):
         return False
     
-    xml_files = [f for f in os.listdir(output_folder) if f.endswith('.xml')]
+    xml_files = [f for f in os.listdir(vocdataset_folder) if f.endswith('.xml')]
     
     if not xml_files:
         return False
     
     # Check first 10 XML files to determine annotation type
     for xml_file in xml_files[:10]:
-        xml_path = os.path.join(output_folder, xml_file)
+        xml_path = os.path.join(vocdataset_folder, xml_file)
         try:
             tree = ET.parse(xml_path)
             root = tree.getroot()

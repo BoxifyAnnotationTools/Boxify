@@ -16,11 +16,11 @@ class ClassManager:
         self.inference_root = f"inference/{workspace_name}"
         self.labels_folder = os.path.join(self.inference_root, "labels")
         self.data_yaml_path = os.path.join(self.inference_root, "data.yaml")
-        self.output_folder = f"output/{workspace_name}"
+        self.voc_dataset = f"vocdataset/{workspace_name}"
         
         os.makedirs(self.config_dir, exist_ok=True)
         os.makedirs(self.labels_folder, exist_ok=True)
-        os.makedirs(self.output_folder, exist_ok=True)
+        os.makedirs(self.voc_dataset, exist_ok=True)
         
         self.classes: List[str] = []
         self.colors: List[Tuple[int, int, int]] = []
@@ -30,15 +30,47 @@ class ClassManager:
         self._generate_colors()
     
     def _load_classes(self):
-        """Load classes from file or create empty file"""
+        """Load classes from config or rebuild the config from VOC XML files."""
         if os.path.exists(self.class_file):
             with open(self.class_file, 'r', encoding='utf-8') as f:
                 self.classes = [line.strip() for line in f if line.strip()]
             print(f"[ClassManager] Loaded {len(self.classes)} classes from {self.class_file}")
         else:
-            self.classes = []
+            self.classes = self._scan_classes_from_xml()
             self._save_classes()
-            print(f"[ClassManager] Created new class file: {self.class_file}")
+            if self.classes:
+                print(f"[ClassManager] Rebuilt {self.class_file} from VOC XML annotations")
+            else:
+                print(f"[ClassManager] Created empty class file: {self.class_file}")
+
+    def _scan_classes_from_xml(self) -> List[str]:
+        """Collect unique class names from all VOC XML files in the workspace."""
+        if not os.path.isdir(self.voc_dataset):
+            return []
+
+        classes = []
+        known_classes = set()
+        xml_files = sorted(
+            filename for filename in os.listdir(self.voc_dataset)
+            if filename.lower().endswith('.xml')
+        )
+
+        for xml_file in xml_files:
+            xml_path = os.path.join(self.voc_dataset, xml_file)
+            try:
+                root = ET.parse(xml_path).getroot()
+            except (ET.ParseError, OSError) as exc:
+                print(f"[ClassManager] Could not scan {xml_file}: {exc}")
+                continue
+
+            for name_elem in root.findall('.//object/name'):
+                class_name = (name_elem.text or '').strip()
+                if class_name and class_name not in known_classes:
+                    known_classes.add(class_name)
+                    classes.append(class_name)
+
+        print(f"[ClassManager] Found {len(classes)} classes in {self.voc_dataset}")
+        return classes
     
     def _save_classes(self):
         """Save classes to file"""
@@ -193,14 +225,14 @@ class ClassManager:
         Update all XML annotation files by removing objects with deleted class
         Returns: number of files updated
         """
-        if not os.path.exists(self.output_folder):
+        if not os.path.exists(self.voc_dataset):
             return 0
         
         updated_count = 0
-        xml_files = [f for f in os.listdir(self.output_folder) if f.endswith('.xml')]
+        xml_files = [f for f in os.listdir(self.voc_dataset) if f.endswith('.xml')]
         
         for xml_file in xml_files:
-            xml_path = os.path.join(self.output_folder, xml_file)
+            xml_path = os.path.join(self.voc_dataset, xml_file)
             
             try:
                 # Parse XML
