@@ -13,7 +13,8 @@ set TORCH_STATUS=SUCCESS
 set GPU_TYPE=CPU
 set ARCH=x64
 
-set PYTHON_VERSION=3.12.10
+:: Gunakan 3.12.6 (versi rilis stabil 3.12 saat ini), 3.12.10 belum rilis
+set PYTHON_VERSION=3.12.6
 set PYTHON_FOLDER=Python312
 set PYTHON_INSTALLER=%TEMP%\python_installer.exe
 
@@ -22,37 +23,12 @@ set PYTHON_INSTALLER=%TEMP%\python_installer.exe
 :: =========================================================
 cls
 
-echo.
-echo =========================================================
-echo                     BOXIFY INSTALLER
-echo =========================================================
-echo.
-echo This installer will:
-echo.
-echo  - Install Python 3.12
-echo  - Create isolated virtual environment
-echo  - Install AI dependencies
-echo  - Create desktop shortcut
-echo.
-echo =========================================================
-echo LICENSE INFORMATION
-echo =========================================================
-echo.
-echo Boxify uses the MIT License.
-echo.
-echo MIT License means:
-echo.
-echo  - You are free to use the software
-echo  - You are free to modify the software
-echo  - You are free to distribute the software
-echo  - No personal data is collected by this installer
-echo  - No files are uploaded anywhere
-echo.
-echo This installer only installs required dependencies
-echo locally on your computer.
-echo.
-echo =========================================================
-echo.
+echo "=========================================="
+echo "  Welcome to Boxify, Local annotation tool"
+echo "        Thanks for choosing us"
+echo "=========================================="
+echo "System is preparing your environment..."
+echo "=========================================="
 
 choice /c YN /m "Continue installation?"
 
@@ -94,7 +70,6 @@ if %ERRORLEVEL% equ 0 (
 )
 
 :: Detect NVIDIA GPU through the NVIDIA driver utility.
-:: This is more reliable than matching localized WMI adapter names.
 where nvidia-smi >nul 2>&1
 
 if not errorlevel 1 (
@@ -130,7 +105,7 @@ py -3.12 --version >nul 2>&1
 IF %ERRORLEVEL% NEQ 0 (
 
     echo [!] Python 3.12 not found.
-    echo [*] Downloading Python installer...
+    echo [*] Downloading Python %PYTHON_VERSION% installer...
 
     powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/%PYTHON_VERSION%/python-%PYTHON_VERSION%-amd64.exe' -OutFile '%PYTHON_INSTALLER%'"
@@ -149,7 +124,8 @@ IF %ERRORLEVEL% NEQ 0 (
     InstallAllUsers=1 ^
     PrependPath=1 ^
     Include_test=0 ^
-    Include_launcher=1
+    Include_launcher=1 ^
+    Include_tcltk=1
 
     IF %ERRORLEVEL% NEQ 0 (
         echo [ERROR] Python installation failed.
@@ -236,9 +212,13 @@ if "%ARCH%"=="ARM" (
     goto TORCH_DONE
 )
 
-echo [*] Installing PyTorch...
-
-pip install torch torchvision torchaudio --retries 5 --timeout 30
+if "%GPU_TYPE%"=="NVIDIA" (
+    echo [*] Installing PyTorch with CUDA 12.1 support...
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 --retries 5 --timeout 60
+) else (
+    echo [*] Installing PyTorch (CPU version)...
+    pip install torch torchvision torchaudio --retries 5 --timeout 60
+)
 
 if errorlevel 1 (
     echo [WARNING] PyTorch installation failed.
@@ -252,8 +232,7 @@ if errorlevel 1 (
 :: =========================================================
 echo.
 echo [6/6] Installing Boxify dependencies...
-
-pip install ultralytics pyinstaller streamlit yt-dlp --retries 5 --timeout 30
+pip install ultralytics pyinstaller streamlit yt-dlp pycocotools-windows --retries 5 --timeout 30
 
 IF %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Dependency installation failed.
@@ -284,11 +263,13 @@ set "PS_SCRIPT=%TEMP%\boxify_shortcut.ps1"
 >> "%PS_SCRIPT%" echo $sc1.TargetPath = $pythonExe
 >> "%PS_SCRIPT%" echo $sc1.Arguments = '"' + $scriptPath + '"'
 >> "%PS_SCRIPT%" echo $sc1.WorkingDirectory = $rootPath
+>> "%PS_SCRIPT%" echo $sc1.Description = 'Local Annotation Tool'
 >> "%PS_SCRIPT%" echo if (Test-Path $iconPath^) { $sc1.IconLocation = $iconPath }
 >> "%PS_SCRIPT%" echo $sc1.Save(^)
 
 >> "%PS_SCRIPT%" echo $sc2 = $ws.CreateShortcut($desktopShortcut)
 >> "%PS_SCRIPT%" echo $sc2.TargetPath = $rootShortcut
+>> "%PS_SCRIPT%" echo $sc2.Description = 'Local Annotation Tool'
 >> "%PS_SCRIPT%" echo if (Test-Path $iconPath^) { $sc2.IconLocation = $iconPath }
 >> "%PS_SCRIPT%" echo $sc2.Save(^)
 
