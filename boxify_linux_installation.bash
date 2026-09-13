@@ -2,11 +2,11 @@
 set -Eeuo pipefail
 
 # ==========================================
-#         Boxify Universal Installer
+#    Boxify Universal Installer
 # ==========================================
 
 echo "=========================================="
-echo "    Welcome to Boxify, AI Annotator"
+echo "  Welcome to Boxify, Local annotation tool"
 echo "        Thanks for choosing us"
 echo "=========================================="
 echo "System is preparing your environment..."
@@ -35,15 +35,15 @@ echo "[*] Detecting OS: $OS"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 APP_PATH="$SCRIPT_DIR"
-PYTHON_VERSION="3.11.9"
-PYTHON_BIN="python3.11"
+PYTHON_VERSION_PREFIX="3.12"
+PYTHON_BIN="python3.12"
 VENV_DIR="$APP_PATH/boxify"
 
 # ──────────────────────────────────────────
 # DEBIAN / UBUNTU / MINT
 # ──────────────────────────────────────────
 if [[ "$OS" == "ubuntu" || "$OS" == "debian" || "$OS" == "linuxmint" ]]; then
-    echo "[*] Installing Python $PYTHON_VERSION and Tkinter packages..."
+    echo "[*] Installing Python $PYTHON_VERSION_PREFIX and Tkinter packages..."
     sudo apt update
     sudo apt install -y software-properties-common
 
@@ -53,30 +53,33 @@ if [[ "$OS" == "ubuntu" || "$OS" == "debian" || "$OS" == "linuxmint" ]]; then
     fi
 
     sudo apt install -y \
-        python3.11 \
-        python3.11-venv \
-        python3.11-dev \
-        python3.11-tk
+        python3.12 \
+        python3.12-venv \
+        python3.12-dev \
+        python3.12-tk
 fi
 
 # ──────────────────────────────────────────
 # ARCH / MANJARO
 # ──────────────────────────────────────────
 if [[ "$OS" == "arch" || "$OS" == "manjaro" ]]; then
-    echo "[*] Installing Python, Tkinter, and virtual environment dependencies..."
-    sudo pacman -S --noconfirm python tk mesa libcanberra
-    PYTHON_BIN="python"
+    echo "[*] Installing Python $PYTHON_VERSION_PREFIX, Tkinter, and virtual environment dependencies..."
+    # Memaksa instalasi python312 agar seragam, jika tidak ada di repo resmi mungkin butuh AUR (yay -S python312)
+    sudo pacman -S --noconfirm python312 tk mesa libcanberra || {
+        echo "[!] Gagal install python312 via pacman. Pastikan 'python312' tersedia atau gunakan AUR (contoh: yay -S python312)"
+        exit 1
+    }
 fi
 
 # ──────────────────────────────────────────
 # FEDORA / RHEL / CENTOS
 # ──────────────────────────────────────────
 if [[ "$OS" == "fedora" || "$OS" == "rhel" || "$OS" == "centos" ]]; then
-    echo "[*] Installing Python $PYTHON_VERSION and Tkinter packages..."
+    echo "[*] Installing Python $PYTHON_VERSION_PREFIX and Tkinter packages..."
     sudo dnf install -y \
-        python3.11 \
-        python3.11-devel \
-        python3.11-tkinter
+        python3.12 \
+        python3.12-devel \
+        python3.12-tkinter
     sudo dnf install -y mesa-libGL libglvnd-glx
 fi
 
@@ -88,8 +91,9 @@ fi
 PYTHON_ACTUAL_VERSION="$($PYTHON_BIN -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')"
 echo "[OK] Python $PYTHON_ACTUAL_VERSION detected."
 
-if [[ "$PYTHON_ACTUAL_VERSION" != "$PYTHON_VERSION" ]]; then
-    echo "[ERROR] Boxify requires Python $PYTHON_VERSION exactly."
+# Cek apakah versi python depannya "3.12"
+if [[ "$PYTHON_ACTUAL_VERSION" != ${PYTHON_VERSION_PREFIX}.* ]]; then
+    echo "[ERROR] Boxify requires Python $PYTHON_VERSION_PREFIX.x exactly."
     echo "[ERROR] The detected interpreter is $PYTHON_ACTUAL_VERSION."
     exit 1
 fi
@@ -112,7 +116,7 @@ fi
 source "$VENV_DIR/bin/activate"
 
 python -c 'import tkinter' || {
-    echo "[ERROR] Tkinter is unavailable. Install the matching python3.11-tk package."
+    echo "[ERROR] Tkinter is unavailable. Install the matching python3.12-tk / python3.12-tkinter package."
     exit 1
 }
 
@@ -162,6 +166,7 @@ chmod +x "$LAUNCHER_PATH"
 cat <<EOF > "$DESKTOP_FILE"
 [Desktop Entry]
 Name=Boxify
+Comment=Annotate dataset with Boxify
 Exec=$LAUNCHER_PATH
 Icon=$APP_PATH/assets/boxify.png
 Type=Application
@@ -172,10 +177,14 @@ EOF
 
 chmod +x "$DESKTOP_FILE"
 
-# Mark the launcher as trusted where the desktop environment supports it.
-if command -v gio &> /dev/null; then
-    gio set "$DESKTOP_FILE" metadata::trusted true 2>/dev/null || true
+USER_APP_DIR="$HOME/.local/share/applications"
+mkdir -p "$USER_APP_DIR"
+cp "$DESKTOP_FILE" "$USER_APP_DIR/Boxify.desktop"
+
+if command -v update-desktop-database &> /dev/null; then
+    update-desktop-database "$USER_APP_DIR" 2>/dev/null || true
 fi
+echo "[OK] Boxify added to your Application Menu (App Drawer)."
 
 DESKTOP_DIR="$(xdg-user-dir DESKTOP 2>/dev/null || true)"
 if [[ -n "$DESKTOP_DIR" && -d "$DESKTOP_DIR" ]]; then
@@ -185,8 +194,6 @@ if [[ -n "$DESKTOP_DIR" && -d "$DESKTOP_DIR" ]]; then
         gio set "$DESKTOP_DIR/Boxify.desktop" metadata::trusted true 2>/dev/null || true
     fi
     echo "[OK] Desktop shortcut created at $DESKTOP_DIR/Boxify.desktop"
-else
-    echo "[NOTICE] Desktop folder was not detected. Use $DESKTOP_FILE to launch Boxify."
 fi
 
 # ──────────────────────────────────────────
@@ -196,6 +203,6 @@ echo ""
 echo "=========================================="
 echo "      INSTALLATION COMPLETED!"
 echo "=========================================="
-echo "Run with:"
-echo "$DESKTOP_FILE"
+echo "You can now run Boxify from your Application Menu"
+echo "or via the Desktop shortcut!"
 echo "=========================================="
