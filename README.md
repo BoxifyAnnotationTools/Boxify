@@ -47,16 +47,24 @@ The application can run on CPU. NVIDIA GPU support requires a compatible NVIDIA 
 
 ### Linux
 
-Run these commands from the cloned repository:
-
+1. Install git (if you haven't install git)
+```bash
+sudo apt install git
+```
+2. Clone this repository
+```bash
+git clone https://github.com/BoxifyAnnotationTools/Boxify.git 
+```
+3. Add access to linux installation script
 ```bash
 chmod +x boxify_linux_installation.bash
+```
+4. Run Boxify installation script
+```bash
 ./boxify_linux_installation.bash
 ```
 
-The installer asks for your `sudo` password at the beginning, installs Python 3.11.9 with Tkinter and venv support, creates the `boxify/` virtual environment, installs dependencies, and creates a desktop launcher.
-
-If your distribution cannot provide Python **3.11.9** exactly, the installer stops instead of silently creating an environment with a different Python version.
+The installer asks for your `sudo` password at the beginning, installs Python with Tkinter and venv support, creates the `boxify/` virtual environment, installs dependencies, and creates a desktop launcher.
 
 ### Windows
 
