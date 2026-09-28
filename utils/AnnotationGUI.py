@@ -894,7 +894,7 @@ class AnnotationGUI:
 
         return annotations
 
-    def _export_coco_dataset(self, target, train_pct, valid_pct, image_exts):
+    def _export_coco_dataset(self, target, train_pct, valid_pct, image_exts, progress_cb=None):
         """Export indexed workspace images and VOC annotations as COCO JSON."""
         records = self._find_workspace_images(image_exts)
         if not records:
@@ -902,6 +902,7 @@ class AnnotationGUI:
 
         random.shuffle(records)
         total = len(records)
+        processed = 0
         train_count = int(round(total * (train_pct / 100.0)))
         valid_count = int(round(total * (valid_pct / 100.0)))
         if train_count + valid_count > total:
@@ -960,6 +961,10 @@ class AnnotationGUI:
                     coco['annotations'].append(annotation)
                     annotation_id += 1
 
+                processed += 1
+                if progress_cb:
+                    progress_cb(processed, total, f'Exporting COCO... {processed}/{total}')
+
             annotation_dir = os.path.join(target, 'annotations')
             os.makedirs(annotation_dir, exist_ok=True)
             json_path = os.path.join(annotation_dir, f'instances_{split_name}.json')
@@ -968,10 +973,126 @@ class AnnotationGUI:
 
         return target
 
+    def _export_yolo_dataset(self, target, train_pct, valid_pct, image_exts, progress_cb=None):
+        """Export indexed inference images/labels as a YOLO train/val/test split."""
+        imgs_src = os.path.join(inference_root, 'images')
+        lbls_src = os.path.join(inference_root, 'labels')
+        if not os.path.isdir(imgs_src):
+            raise ValueError(f'No images in {imgs_src}')
+
+        imgs = [f for f in os.listdir(imgs_src) if f.lower().endswith(image_exts)]
+        if not imgs:
+            raise ValueError(f'No images in {imgs_src}')
+
+        random.shuffle(imgs)
+        n = len(imgs)
+        n_train = int(round(n * (train_pct / 100.0)))
+        n_valid = int(round(n * (valid_pct / 100.0)))
+        if n_train + n_valid > n:
+            n_valid = max(0, n - n_train)
+        splits = {
+            'train': imgs[:n_train],
+            'val': imgs[n_train:n_train + n_valid],
+            'test': imgs[n_train + n_valid:]
+        }
+
+        processed = 0
+        for split_name, files in splits.items():
+            out_images = os.path.join(target, split_name, 'images')
+            out_labels = os.path.join(target, split_name, 'labels')
+            os.makedirs(out_images, exist_ok=True)
+            os.makedirs(out_labels, exist_ok=True)
+            for im in files:
+                try:
+                    shutil.copy2(os.path.join(imgs_src, im), os.path.join(out_images, im))
+                except Exception:
+                    pass
+                base = os.path.splitext(im)[0]
+                lbl_src = os.path.join(lbls_src, base + '.txt')
+                if os.path.exists(lbl_src):
+                    try:
+                        shutil.copy2(lbl_src, os.path.join(out_labels, base + '.txt'))
+                    except Exception:
+                        pass
+                else:
+                    open(os.path.join(out_labels, base + '.txt'), 'w').close()
+
+                processed += 1
+                if progress_cb:
+                    progress_cb(processed, n, f'Exporting YOLO... {processed}/{n}')
+
+        try:
+            data_yml = os.path.join(target, 'data.yml')
+            with open(data_yml, 'w') as fy:
+                fy.write(f"train: {os.path.abspath(os.path.join(target, 'train', 'images'))}\n")
+                fy.write(f"val:   {os.path.abspath(os.path.join(target, 'val', 'images'))}\n")
+                fy.write(f"test:  {os.path.abspath(os.path.join(target, 'test', 'images'))}\n")
+                fy.write(f"nc:    {len(CLASSLIST)}\n")
+                fy.write('names:\n')
+                for i, name in enumerate(CLASSLIST):
+                    fy.write(f"  {i}: {name}\n")
+        except Exception:
+            pass
+
+        return target
+
+    def _export_voc_dataset(self, target, train_pct, valid_pct, image_exts, progress_cb=None):
+        """Export indexed workspace images and their VOC XML annotations."""
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        datasets_input_root = os.path.join(project_root, 'datasetsInput')
+        workspace_prefix = workspaceName
+
+        folders = [f for f in os.listdir(datasets_input_root) if f.startswith(workspace_prefix + '-')] if os.path.isdir(datasets_input_root) else []
+        images_found = []
+        for folder in folders:
+            full = os.path.join(datasets_input_root, folder)
+            if not os.path.isdir(full):
+                continue
+            files = [f for f in os.listdir(full) if os.path.splitext(f)[1].lower() in image_exts]
+            for f in files:
+                images_found.append(os.path.join(full, f))
+
+        if not images_found:
+            raise ValueError(f'No images found for workspace {workspace_prefix} in datasetsInput')
+
+        random.shuffle(images_found)
+        n = len(images_found)
+        n_train = int(round(n * (train_pct / 100.0)))
+        n_valid = int(round(n * (valid_pct / 100.0)))
+        if n_train + n_valid > n:
+            n_valid = max(0, n - n_train)
+
+        train_imgs = images_found[:n_train]
+        valid_imgs = images_found[n_train:n_train + n_valid]
+        test_imgs = images_found[n_train + n_valid:]
+
+        processed = 0
+        for split_name, imgs_list in (('train', train_imgs), ('valid', valid_imgs), ('test', test_imgs)):
+            out_dir = os.path.join(target, split_name)
+            os.makedirs(out_dir, exist_ok=True)
+            for img_path in imgs_list:
+                try:
+                    shutil.copy2(img_path, os.path.join(out_dir, os.path.basename(img_path)))
+                except Exception:
+                    pass
+                base = os.path.splitext(os.path.basename(img_path))[0]
+                xml_path = os.path.join(vocdataset_folder, base + '.xml')
+                if os.path.exists(xml_path):
+                    try:
+                        shutil.copy2(xml_path, os.path.join(out_dir, base + '.xml'))
+                    except Exception:
+                        pass
+
+                processed += 1
+                if progress_cb:
+                    progress_cb(processed, n, f'Exporting Pascal VOC... {processed}/{n}')
+
+        return target
+
     def show_export_dataset_dialog(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Export Dataset")
-        dialog.geometry("520x320")
+        dialog.geometry("520x350")
         dialog.configure(bg=C_BASE)
         dialog.transient(self.root)
         dialog.grab_set()
@@ -1059,8 +1180,11 @@ class AnnotationGUI:
 
         # Dragging logic
         drag_data = {'item': None}
+        export_state = {'active': False}
 
         def on_press(event):
+            if export_state['active']:
+                return
             item = slider_canvas.find_closest(event.x, event.y)[0]
             if item in (handle1, handle2):
                 drag_data['item'] = item
@@ -1154,7 +1278,29 @@ class AnnotationGUI:
         status_lbl = tk.Label(body, text='', bg=C_CARD, fg=C_TXT1)
         status_lbl.pack(fill=tk.X, pady=(8,0))
 
+        progress_bar = ttk.Progressbar(body, orient='horizontal', mode='determinate', maximum=100)
+        progress_bar.pack(fill=tk.X, pady=(4,0))
+
+        def set_ui_locked(locked):
+            export_state['active'] = locked
+            state = 'disabled' if locked else 'readonly'
+            fmt_combo.config(state=state)
+            sb_train.config(state='disabled' if locked else 'normal')
+            sb_valid.config(state='disabled' if locked else 'normal')
+            export_btn.config(state='disabled' if locked else 'normal')
+            close_btn.config(state='disabled' if locked else 'normal')
+
+        def on_dialog_close():
+            if export_state['active']:
+                return
+            dialog.destroy()
+
+        dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
+
         def do_export_dataset():
+            if export_state['active']:
+                return
+
             fmt = fmt_combo.get()
             t = safe_to_int(train_var.get())
             v = safe_to_int(valid_var.get())
@@ -1163,144 +1309,83 @@ class AnnotationGUI:
                 messagebox.showerror('Invalid Split', 'Train+Valid+Test must equal 100%', parent=dialog)
                 return
 
-            # determine target folder
-            target = export_dataset_folder
-
-            # If the target exists, remove it to avoid mixing previous exports
-            try:
-                if os.path.exists(target):
-                    # Safety: ensure target is inside project folder to avoid accidental deletes
-                    proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-                    abs_target = os.path.abspath(target)
-                    if abs_target.startswith(proj_root):
-                        shutil.rmtree(abs_target)
-                    else:
-                        # If target is outside project, don't auto-delete; just create subfolder with timestamp
-                        target = os.path.join(target, f'export_{int(time.time())}')
-                os.makedirs(target, exist_ok=True)
-            except Exception:
-                # fallback: ensure target exists
-                os.makedirs(target, exist_ok=True)
-
             image_exts = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp')
 
-            try:
-                if fmt == 'YOLO':
-                    imgs_src = os.path.join(inference_root, 'images')
-                    lbls_src = os.path.join(inference_root, 'labels')
-                    if not os.path.isdir(imgs_src):
-                        messagebox.showerror('No images', f'No images in {imgs_src}', parent=dialog)
-                        return
-                    imgs = [f for f in os.listdir(imgs_src) if f.lower().endswith(image_exts)]
-                    random.shuffle(imgs)
-                    n = len(imgs)
-                    n_train = int(round(n * (t / 100.0)))
-                    n_valid = int(round(n * (v / 100.0)))
-                    if n_train + n_valid > n:
-                        n_valid = max(0, n - n_train)
-                    splits = {
-                        'train': imgs[:n_train],
-                        'val': imgs[n_train:n_train + n_valid],
-                        'test': imgs[n_train + n_valid:]
-                    }
+            set_ui_locked(True)
+            progress_bar['value'] = 0
+            status_lbl.config(text='Preparing export...')
+            # Force an immediate repaint so the locked/0% state is visible right away,
+            # instead of only appearing once the (possibly very fast) worker finishes.
+            dialog.update_idletasks()
 
-                    for split_name, files in splits.items():
-                        out_images = os.path.join(target, split_name, 'images')
-                        out_labels = os.path.join(target, split_name, 'labels')
-                        os.makedirs(out_images, exist_ok=True)
-                        os.makedirs(out_labels, exist_ok=True)
-                        for im in files:
-                            try:
-                                shutil.copy2(os.path.join(imgs_src, im), os.path.join(out_images, im))
-                            except Exception:
-                                pass
-                            base = os.path.splitext(im)[0]
-                            lbl_src = os.path.join(lbls_src, base + '.txt')
-                            if os.path.exists(lbl_src):
-                                try:
-                                    shutil.copy2(lbl_src, os.path.join(out_labels, base + '.txt'))
-                                except Exception:
-                                    pass
-                            else:
-                                open(os.path.join(out_labels, base + '.txt'), 'w').close()
+            last_pct = {'value': -1}
 
-                    # write basic data.yml
+            def progress_cb(current, total, message=None):
+                def update():
+                    pct = int((current / total) * 100) if total else 0
+                    progress_bar['value'] = pct
+                    status_lbl.config(text=message or f'Exporting... {pct}%')
+                    # Small/fast exports can finish within a single Tk event-loop
+                    # iteration, so queued updates never get painted before the
+                    # completion dialog takes over. Force a repaint whenever the
+                    # displayed percentage actually changes so progress is visible
+                    # without adding per-file overhead on large datasets.
+                    if pct != last_pct['value']:
+                        last_pct['value'] = pct
+                        progress_bar.update_idletasks()
+                self.root.after(0, update)
+
+            def worker():
+                try:
+                    target = export_dataset_folder
+                    # If the target exists, remove it to avoid mixing previous exports
                     try:
-                        data_yml = os.path.join(target, 'data.yml')
-                        with open(data_yml, 'w') as fy:
-                            fy.write(f"train: {os.path.abspath(os.path.join(target, 'train', 'images'))}\n")
-                            fy.write(f"val:   {os.path.abspath(os.path.join(target, 'val', 'images'))}\n")
-                            fy.write(f"test:  {os.path.abspath(os.path.join(target, 'test', 'images'))}\n")
-                            fy.write(f"nc:    {len(CLASSLIST)}\n")
-                            fy.write('names:\n')
-                            for i, n in enumerate(CLASSLIST):
-                                fy.write(f"  {i}: {n}\n")
+                        if os.path.exists(target):
+                            # Safety: ensure target is inside project folder to avoid accidental deletes
+                            proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+                            abs_target = os.path.abspath(target)
+                            if abs_target.startswith(proj_root):
+                                shutil.rmtree(abs_target)
+                            else:
+                                # If target is outside project, don't auto-delete; just create subfolder with timestamp
+                                target = os.path.join(target, f'export_{int(time.time())}')
+                        os.makedirs(target, exist_ok=True)
                     except Exception:
-                        pass
+                        os.makedirs(target, exist_ok=True)
 
-                elif 'Pascal' in fmt or 'XML' in fmt:
-                    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-                    datasets_input_root = os.path.join(project_root, 'datasetsInput')
-                    workspace_prefix = workspaceName
+                    if fmt == 'YOLO':
+                        self._export_yolo_dataset(target, t, v, image_exts, progress_cb)
+                    elif 'Pascal' in fmt or 'XML' in fmt:
+                        self._export_voc_dataset(target, t, v, image_exts, progress_cb)
+                    elif fmt == 'COCO':
+                        self._export_coco_dataset(target, t, v, image_exts, progress_cb)
+                    else:
+                        raise ValueError(f'Unknown format: {fmt}')
 
-                    folders = [f for f in os.listdir(datasets_input_root) if f.startswith(workspace_prefix + '-')] if os.path.isdir(datasets_input_root) else []
-                    images_found = []
-                    for folder in folders:
-                        full = os.path.join(datasets_input_root, folder)
-                        if not os.path.isdir(full):
-                            continue
-                        files = [f for f in os.listdir(full) if os.path.splitext(f)[1].lower() in image_exts]
-                        for f in files:
-                            images_found.append(os.path.join(full, f))
+                    def on_success():
+                        set_ui_locked(False)
+                        progress_bar['value'] = 100
+                        status_lbl.config(text=f'Export completed to: {target}')
+                        messagebox.showinfo('Export Completed', f'Dataset exported to:\n{target}', parent=dialog)
+                    self.root.after(0, on_success)
 
-                    if not images_found:
-                        messagebox.showerror('No images', f'No images found for workspace {workspace_prefix} in datasetsInput', parent=dialog)
-                        return
+                except Exception as e:
+                    err = str(e)
+                    def on_error():
+                        set_ui_locked(False)
+                        progress_bar['value'] = 0
+                        status_lbl.config(text='Export failed')
+                        messagebox.showerror('Export Failed', f'Error during export:\n{err}', parent=dialog)
+                    self.root.after(0, on_error)
 
-                    random.shuffle(images_found)
-                    n = len(images_found)
-                    n_train = int(round(n * (t / 100.0)))
-                    n_valid = int(round(n * (v / 100.0)))
-                    if n_train + n_valid > n:
-                        n_valid = max(0, n - n_train)
-
-                    train_imgs = images_found[:n_train]
-                    valid_imgs = images_found[n_train:n_train + n_valid]
-                    test_imgs = images_found[n_train + n_valid:]
-
-                    for split_name, imgs_list in (('train', train_imgs), ('valid', valid_imgs), ('test', test_imgs)):
-                        out_dir = os.path.join(target, split_name)
-                        os.makedirs(out_dir, exist_ok=True)
-                        for img_path in imgs_list:
-                            try:
-                                shutil.copy2(img_path, os.path.join(out_dir, os.path.basename(img_path)))
-                            except Exception:
-                                pass
-                            base = os.path.splitext(os.path.basename(img_path))[0]
-                            xml_path = os.path.join(vocdataset_folder, base + '.xml')
-                            if os.path.exists(xml_path):
-                                try:
-                                    shutil.copy2(xml_path, os.path.join(out_dir, base + '.xml'))
-                                except Exception:
-                                    pass
-
-                elif fmt == 'COCO':
-                    self._export_coco_dataset(target, t, v, image_exts)
-
-                else:
-                    messagebox.showerror('Format not supported', f'Unknown format: {fmt}', parent=dialog)
-                    return
-
-                status_lbl.config(text=f'Export completed to: {target}')
-                messagebox.showinfo('Export Completed', f'Dataset exported to:\n{target}', parent=dialog)
-
-            except Exception as e:
-                messagebox.showerror('Export Failed', f'Error during export:\n{str(e)}', parent=dialog)
+            threading.Thread(target=worker, daemon=True).start()
 
         btn_row = tk.Frame(body, bg=C_CARD)
         btn_row.pack(fill=tk.X, pady=(8,0))
-        tk.Button(btn_row, text='Export', command=do_export_dataset, bg=C_GREEN, fg='#000000').pack(side=tk.RIGHT, padx=6)
-        tk.Button(btn_row, text='Close', command=dialog.destroy, bg=C_CARD2, fg=C_TXT1).pack(side=tk.RIGHT, padx=(0,6))
+        export_btn = tk.Button(btn_row, text='Export', command=do_export_dataset, bg=C_GREEN, fg='#000000')
+        export_btn.pack(side=tk.RIGHT, padx=6)
+        close_btn = tk.Button(btn_row, text='Close', command=on_dialog_close, bg=C_CARD2, fg=C_TXT1)
+        close_btn.pack(side=tk.RIGHT, padx=(0,6))
 
     # ----------------------------------------------------------
     #  Add / Delete class dialogs
