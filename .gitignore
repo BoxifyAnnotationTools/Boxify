@@ -1,6 +1,9 @@
 boxify/*
 !boxify/.gitignore
 
+venv/*
+!venv/.gitignore
+
 exportTools/*
 !exportTools/.gitignore
 

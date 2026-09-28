@@ -2,36 +2,37 @@
 setlocal EnableDelayedExpansion
 
 title Boxify Installer
-
 cd /d %~dp0
 
 :: =========================================================
-:: VARIABLES
+:: ADMIN ELEVATION CHECK
 :: =========================================================
+net session >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo This installer requires administrator privileges.
+    echo Requesting elevation...
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs"
+    exit /b
+)
+
 set FAILED=0
 set TORCH_STATUS=SUCCESS
 set GPU_TYPE=CPU
 set ARCH=x64
 
-:: Gunakan 3.12.6 (versi rilis stabil 3.12 saat ini), 3.12.10 belum rilis
 set PYTHON_VERSION=3.12.6
 set PYTHON_FOLDER=Python312
 set PYTHON_INSTALLER=%TEMP%\python_installer.exe
 
-:: =========================================================
-:: HEADER
-:: =========================================================
 cls
-
-echo "=========================================="
-echo "  Welcome to Boxify, Local annotation tool"
-echo "        Thanks for choosing us"
-echo "=========================================="
-echo "System is preparing your environment..."
-echo "=========================================="
+echo ==========================================
+echo   Welcome to Boxify, Local annotation tool
+echo         Thanks for choosing us
+echo ==========================================
+echo System is preparing your environment...
+echo ==========================================
 
 choice /c YN /m "Continue installation?"
-
 if errorlevel 2 (
     echo.
     echo Installation cancelled.
@@ -40,38 +41,34 @@ if errorlevel 2 (
 )
 
 :: =========================================================
-:: INTERNET CHECK
+:: 0. INTERNET CHECK
 :: =========================================================
 echo.
 echo [0/6] Checking internet connection...
-
-ping google.com -n 1 >nul
-
+ping google.com -n 1 -w 3000 >nul
 if errorlevel 1 (
-    echo [ERROR] No internet connection detected.
-    set FAILED=1
-    goto END
+    ping 1.1.1.1 -n 1 -w 3000 >nul
+    if errorlevel 1 (
+        echo [ERROR] No internet connection detected.
+        set FAILED=1
+        goto END
+    )
 )
-
 echo [OK] Internet connection detected.
 
 :: =========================================================
-:: SYSTEM SCAN
+:: 1. SYSTEM SCAN
 :: =========================================================
 echo.
 echo [1/6] Scanning system...
 
-:: Detect ARM
 echo %PROCESSOR_ARCHITECTURE% | findstr /i "ARM" >nul
-
 if %ERRORLEVEL% equ 0 (
     set ARCH=ARM
     echo [!] Windows ARM detected.
 )
 
-:: Detect NVIDIA GPU through the NVIDIA driver utility.
 where nvidia-smi >nul 2>&1
-
 if not errorlevel 1 (
     nvidia-smi -L >nul 2>&1
     if not errorlevel 1 (
@@ -83,7 +80,7 @@ if not errorlevel 1 (
         echo [*] CPU mode will be used.
     )
 ) else (
-    :: Fallback for systems where the NVIDIA utility is unavailable.
+    :: Fallback for systems where the NVIDIA utility is unavailable or not on PATH.
     powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; $gpu = Get-CimInstance Win32_VideoController; if($gpu.Name -match 'NVIDIA|RTX|GTX|TESLA'^){ exit 0 } else { exit 1 }"
     if not errorlevel 1 (
         set GPU_TYPE=NVIDIA
@@ -95,21 +92,18 @@ if not errorlevel 1 (
 )
 
 :: =========================================================
-:: CHECK PYTHON
+:: 2. CHECK PYTHON
 :: =========================================================
 echo.
 echo [2/6] Checking Python installation...
 
 py -3.12 --version >nul 2>&1
-
-IF %ERRORLEVEL% NEQ 0 (
-
+if %ERRORLEVEL% NEQ 0 (
     echo [!] Python 3.12 not found.
     echo [*] Downloading Python %PYTHON_VERSION% installer...
-
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/%PYTHON_VERSION%/python-%PYTHON_VERSION%-amd64.exe' -OutFile '%PYTHON_INSTALLER%'"
-
+    
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/%PYTHON_VERSION%/python-%PYTHON_VERSION%-amd64.exe' -OutFile '%PYTHON_INSTALLER%'"
+    
     if not exist "%PYTHON_INSTALLER%" (
         echo [ERROR] Failed to download Python installer.
         set FAILED=1
@@ -117,52 +111,36 @@ IF %ERRORLEVEL% NEQ 0 (
     )
 
     echo [*] Installing Python silently...
-    echo [*] This may take a minute...
+    start /wait "" "%PYTHON_INSTALLER%" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0 Include_launcher=1 Include_tcltk=1
 
-    start /wait "" "%PYTHON_INSTALLER%" ^
-    /quiet ^
-    InstallAllUsers=1 ^
-    PrependPath=1 ^
-    Include_test=0 ^
-    Include_launcher=1 ^
-    Include_tcltk=1
-
-    IF %ERRORLEVEL% NEQ 0 (
+    if !ERRORLEVEL! NEQ 0 (
         echo [ERROR] Python installation failed.
         set FAILED=1
         goto END
     )
-
     echo [OK] Python installed successfully.
 )
 
-:: Refresh PATH manually
 set "PATH=%PATH%;C:\Program Files\%PYTHON_FOLDER%;C:\Program Files\%PYTHON_FOLDER%\Scripts"
 
-:: Final Python verification
 py -3.12 --version >nul 2>&1
-
-IF %ERRORLEVEL% NEQ 0 (
+if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Python still not detected.
     set FAILED=1
     goto END
 )
-
 echo [OK] Python detected.
 
 :: =========================================================
-:: VIRTUAL ENVIRONMENT
+:: 3. VIRTUAL ENVIRONMENT
 :: =========================================================
 echo.
 echo [3/6] Preparing virtual environment...
 
 if not exist "%~dp0venv\" (
-
     echo [*] Creating virtual environment...
-
     py -3.12 -m venv "%~dp0venv"
-
-    IF %ERRORLEVEL% NEQ 0 (
+    if !ERRORLEVEL! NEQ 0 (
         echo [ERROR] Failed to create virtual environment.
         set FAILED=1
         goto END
@@ -176,50 +154,51 @@ if not exist "%~dp0venv\Scripts\activate.bat" (
 )
 
 call "%~dp0venv\Scripts\activate.bat"
-
-IF %ERRORLEVEL% NEQ 0 (
+if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Failed to activate virtual environment.
     set FAILED=1
     goto END
 )
-
 echo [OK] Virtual environment ready.
 
 :: =========================================================
-:: UPDATE PIP
+:: 4. UPDATE PIP
 :: =========================================================
 echo.
 echo [4/6] Updating package manager...
-
 python -m pip install --upgrade pip setuptools wheel --retries 5 --timeout 30
-
-IF %ERRORLEVEL% NEQ 0 (
+if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Failed to update pip.
     set FAILED=1
     goto END
 )
 
 :: =========================================================
-:: INSTALL PYTORCH
+:: [5/6] INSTALL PYTORCH
 :: =========================================================
 echo.
 echo [5/6] Installing AI engine...
 
-if "%ARCH%"=="ARM" (
-    echo [!] ARM detected.
-    echo [!] PyTorch installation skipped.
-    set TORCH_STATUS=SKIPPED_ARM
-    goto TORCH_DONE
-)
+if "%ARCH%"=="ARM" goto TORCH_ARM
+if "%GPU_TYPE%"=="NVIDIA" goto TORCH_NVIDIA
 
-if "%GPU_TYPE%"=="NVIDIA" (
-    echo [*] Installing PyTorch with CUDA 12.1 support...
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 --retries 5 --timeout 60
-) else (
-    echo [*] Installing PyTorch (CPU version)...
-    pip install torch torchvision torchaudio --retries 5 --timeout 60
-)
+:: Default CPU fallback
+echo [*] Installing PyTorch (CPU version)...
+python -m pip install torch torchvision torchaudio --retries 5 --timeout 60
+goto CHECK_TORCH
 
+:TORCH_NVIDIA
+echo [*] Installing PyTorch with CUDA 12.1 support...
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 --retries 5 --timeout 60
+goto CHECK_TORCH
+
+:TORCH_ARM
+echo [!] ARM detected.
+echo [!] PyTorch installation skipped.
+set TORCH_STATUS=SKIPPED_ARM
+goto TORCH_DONE
+
+:CHECK_TORCH
 if errorlevel 1 (
     echo [WARNING] PyTorch installation failed.
     set TORCH_STATUS=FAILED
@@ -228,18 +207,17 @@ if errorlevel 1 (
 :TORCH_DONE
 
 :: =========================================================
-:: INSTALL OTHER DEPENDENCIES
+:: 6. INSTALL DEPENDENCIES
 :: =========================================================
 echo.
 echo [6/6] Installing Boxify dependencies...
-pip install ultralytics pyinstaller streamlit yt-dlp pycocotools-windows --retries 5 --timeout 30
+python -m pip install ultralytics pyinstaller streamlit yt-dlp --retries 5 --timeout 30
 
-IF %ERRORLEVEL% NEQ 0 (
+if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Dependency installation failed.
     set FAILED=1
     goto END
 )
-
 echo [OK] Dependencies installed successfully.
 
 :: =========================================================
@@ -287,13 +265,11 @@ del "%PS_SCRIPT%" >nul 2>&1
 :: =========================================================
 echo.
 echo =========================================================
-
 if %FAILED% equ 1 (
-    echo                 INSTALLATION FAILED
+    echo                    INSTALLATION FAILED
 ) else (
-    echo                  BOXIFY IS READY
+    echo                     BOXIFY IS READY
 )
-
 echo =========================================================
 
 if "%TORCH_STATUS%"=="SKIPPED_ARM" (
@@ -316,33 +292,20 @@ echo   Boxify.lnk
 echo.
 echo Thank you for using Boxify.
 echo =========================================================
-
 goto FINISH
 
 :: =========================================================
 :: ERROR HANDLER
 :: =========================================================
 :END
-
 echo.
 echo =========================================================
-echo                 INSTALLATION FAILED
+echo                    INSTALLATION FAILED
 echo =========================================================
-echo.
-echo Please check:
-echo.
-echo  - Internet connection
-echo  - Windows permissions
-echo  - Antivirus restrictions
-echo.
-echo Then try again.
+echo Please check your internet connection or permissions.
 echo =========================================================
 
-:: =========================================================
-:: EXIT
-:: =========================================================
 :FINISH
-
 echo.
 pause
 exit
