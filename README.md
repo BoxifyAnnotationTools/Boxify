@@ -13,10 +13,11 @@ Boxify is designed for individuals and teams that need a private, offline-first 
 ## Features
 
 - Local annotation workflow with no required cloud account
+- A VS Code-style workspace picker for switching between datasets
 - Bounding box annotation for object detection
 - Polygon annotation for image segmentation
-- Automatic annotation with an Ultralytics YOLO model
-- Model training from the annotation workspace
+- AI-assisted annotation with an Ultralytics YOLO model
+- Model training from the annotation workspace, reading images straight from `datasetsInput/` (no duplicate copies)
 - NVIDIA CUDA and CPU workflows, depending on the installed PyTorch build
 - Class management, visibility toggles, image search, zoom, and multi-selection
 - Repeat annotations from the previous image
@@ -91,6 +92,14 @@ venv\Scripts\activate
 python utils\Annotator.py
 ```
 
+Running `Annotator.py` with no arguments opens the **workspace picker** - a VS
+Code-style "no folder opened" screen that lists every workspace found in
+`datasetsInput/`. Folders are grouped by name, so `weapon-1` and `weapon-2`
+both appear under one `weapon` workspace; picking an instance launches the
+annotation window for it. Inside the annotation window, the **◀** button next
+to the Boxify logo closes that workspace and returns to the picker so you can
+switch datasets without restarting the app.
+
 ## Keyboard Shortcuts
 
 | Key | Action |
@@ -100,8 +109,6 @@ python utils\Annotator.py
 | `Delete` | Delete the current image |
 | `M` | Toggle bounding box and polygon mode |
 | `B` | Force a new bounding box |
-| `F` | Start or stop auto annotation |
-| `P` | Toggle inference while navigating |
 | `G` | Run inference on the current image |
 | `T` | Open the training workflow |
 | `S` | Change the selected annotation class |
@@ -113,24 +120,37 @@ In polygon mode, click to add points, double-click or press `Enter` to finish, a
 
 ## Workspace Structure
 
-Boxify keeps data, annotations, models, and inference files separated by workspace:
+Boxify keeps data, annotations, and models separated by workspace. Images are
+never copied - every format reads them straight from `datasetsInput/`:
 
 ```text
-datasetsInput/<workspace>-<index>/   Input images for annotation
+datasetsInput/<workspace>-<index>/   Input images for annotation (read-only source)
 vocdataset/<workspace>/              Pascal VOC XML annotations
-inference/<workspace>/               YOLO images, labels, and data.yaml
+YOLOdataset/<workspace>/labels/      YOLO .txt labels (keyed by image filename)
 models/<workspace>/                  Trained YOLO models
 configs/<workspace>.txt              Workspace class configuration
 export dataset/<workspace>/          Exported datasets
 export model/<workspace>/            Exported model files
 ```
 
+`YOLOdataset/<workspace>/` also doubles as scratch space during training: a
+`train/`, `val/`, and `data.yaml` are generated there temporarily and removed
+once training finishes.
+
+Every time a workspace is opened, Boxify checks each Pascal VOC XML file in
+`vocdataset/<workspace>/` for a matching YOLO label and generates any that are
+missing. This keeps `YOLOdataset/` in sync automatically - including a
+one-time backfill for datasets annotated before this folder existed - without
+requiring you to re-save every image. Already-synced workspaces open
+instantly; only the first sync of a large, previously-unsynced dataset takes
+noticeably longer, and a progress screen is shown while it runs.
+
 Example workspace:
 
 ```text
 datasetsInput/cat-2/
 vocdataset/cat/
-inference/cat/
+YOLOdataset/cat/
 models/cat/
 configs/cat.txt
 ```
@@ -142,7 +162,7 @@ Boxify supports:
 - Bounding boxes for YOLO object detection datasets
 - Polygons for segmentation workflows
 - Pascal VOC XML annotations in the `vocdataset/` workspace folder
-- YOLO labels and dataset configuration in the `inference/` workspace folder
+- YOLO labels in the `YOLOdataset/<workspace>/labels/` folder, paired with images from `datasetsInput/` at training/export time
 - COCO JSON YOLO exports with bounding boxes and polygon segmentations
 
 ## Exporting a Dataset
@@ -163,7 +183,7 @@ COCO exports use this structure:
 	└── instances_test.json
 ```
 
-The COCO exporter reads images from all indexed folders matching `datasetsInput/<workspace>-<index>/` and annotations from `vocdataset/<workspace>/`.
+The COCO exporter reads images from all indexed folders matching `datasetsInput/<workspace>-<index>/` and annotations from `vocdataset/<workspace>/`. The YOLO exporter does the same for images, pairing each one with its label in `YOLOdataset/<workspace>/labels/`.
 
 The standalone YOLOX conversion utility can be run with:
 

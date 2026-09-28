@@ -13,7 +13,8 @@ import subprocess
 import shutil
 
 from .config import (CLASSLIST, state, input_folder, colorsPalette, vocdataset_folder,
-                   class_manager, inference_root, model_path, model_folder, export_model_folder, export_dataset_folder, workspaceName)
+                   class_manager, yolo_dataset_folder, yolo_labels_folder, model_path,
+                   model_folder, export_model_folder, export_dataset_folder, workspaceName)
 from .file_handler import load_annotation_local
 from .polygon_manager import polygon_manager
 from .inferenceObjectDetection import inference_current
@@ -30,34 +31,18 @@ import random
 import time
 import importlib
 
+from .theme import (C_BASE, C_PANEL, C_CARD, C_CARD2, C_BORDER, C_ACCENT,
+                    C_PURPLE, C_ORANGE, C_GREEN, C_AMBER, C_RED, C_BLUE,
+                    C_TXT1, C_TXT2, C_TXT3)
+
 EPOCH = 5
 BATCH = 4
-
-# ============================================================
-#  BOXIFY DESIGN SYSTEM — "Cyber Terminal" Color Palette
-#  Deep navy base + electric cyan accents to keep users sharp
-# ============================================================
-C_BASE    = '#0a0e1a'   # App background (deepest navy)
-C_PANEL   = '#0f1525'   # Sidebar / panel background
-C_CARD    = '#151d2e'   # Card / input surface
-C_CARD2   = '#1a2540'   # Elevated interactive element
-C_BORDER  = '#1e2d47'   # Dividers / borders
-C_ACCENT  = '#00d4ff'   # Electric cyan — primary accent
-C_PURPLE  = '#8b5cf6'   # Violet — AI / training
-C_ORANGE  = '#ff6b2b'   # Ember — ZeroFill / warning
-C_GREEN   = '#00e676'   # Neon green — success / active
-C_AMBER   = '#ffb300'   # Amber — caution
-C_RED     = '#ff1744'   # Rose red — danger / delete
-C_BLUE    = '#2979ff'   # Electric blue — inference
-C_TXT1    = '#e8f0fe'   # Primary text
-C_TXT2    = '#8899aa'   # Secondary / label text
-C_TXT3    = '#3d5166'   # Muted / hint text
 
 
 class AnnotationGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("BOXIFY — Local Annotation Tool")
+        self.root.title(f"BOXIFY — {os.path.basename(os.path.normpath(input_folder))}")
         self.root.geometry("1600x900")
         self.root.configure(bg=C_BASE)
         self.stream_process = None
@@ -106,11 +91,6 @@ class AnnotationGUI:
         self.zoom_step = 1.1  # Zoom increment per scroll
         self.canvas_container = None  # Store reference to container
         
-        self.auto_annotate_running = False
-        self.auto_annotate_interval = 3000
-        self.auto_annotate_job = None
-        self.inference_in_progress = False
-
         # Setup UI
         self.create_widgets()
 
@@ -148,9 +128,7 @@ class AnnotationGUI:
         self.root.bind('g', lambda e: self.run_inference())
         self.root.bind('e', lambda e: self.repeat_annotations())
         self.root.bind('b', lambda e: self.toggle_force_new_bbox())
-        self.root.bind('p', lambda e: self.toggle_auto_annotation())
         self.root.bind('<Delete>', lambda e: self.delete_image())
-        self.root.bind('f', lambda e: self.toggle_auto_annotate())
         self.root.bind('m', lambda e: self.toggle_annotation_mode())
         self.root.bind('<Escape>', lambda e: self.on_escape_pressed())
         self.root.bind('<Button-3>', lambda e: self.cancel_polygon_drawing())
@@ -212,177 +190,6 @@ class AnnotationGUI:
         self.update_display()
         print(f"[GUI] Force new bbox: {'ON' if state.force_new_bbox else 'OFF'}")
 
-    def toggle_auto_annotation(self):
-        state.automated_annotation = not state.automated_annotation
-        if state.automated_annotation:
-            self.auto_label.config(text="Auto inference: ON", fg=C_GREEN, bg=C_CARD)
-        else:
-            self.auto_label.config(text="Auto inference: OFF", fg=C_TXT3, bg=C_CARD)
-        print(f"[GUI] Auto annotation: {'ON' if state.automated_annotation else 'OFF'}")
-
-    # ----------------------------------------------------------
-    #  Auto-annotate cycle
-    # ----------------------------------------------------------
-    def show_auto_annotate_config_dialog(self):
-        """Dialog for auto annotate configuration — redesigned."""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Auto Annotate — Configuration")
-        dialog.geometry("480x300")
-        dialog.configure(bg=C_BASE)
-        dialog.transient(self.root)
-        dialog.grab_set()
-        dialog.resizable(False, False)
-
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
-        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
-
-        # Header bar
-        hdr = tk.Frame(dialog, bg=C_ACCENT, height=50)
-        hdr.pack(fill=tk.X)
-        hdr.pack_propagate(False)
-        tk.Label(hdr, text="🤖  Auto Annotate Configuration",
-                 font=('Segoe UI', 13, 'bold'),
-                 bg=C_ACCENT, fg='#000000').pack(side=tk.LEFT, padx=16, pady=10)
-
-        # Body
-        body = tk.Frame(dialog, bg=C_BASE, padx=28, pady=18)
-        body.pack(fill=tk.BOTH, expand=True)
-
-        # Interval row
-        row = tk.Frame(body, bg=C_BASE)
-        row.pack(fill=tk.X, pady=(0, 8))
-        tk.Label(row, text="Interval (seconds):", font=('Segoe UI', 10, 'bold'),
-                 bg=C_BASE, fg=C_TXT1, width=18, anchor='w').pack(side=tk.LEFT)
-
-        interval_var = tk.DoubleVar(value=self.auto_annotate_interval / 1000)
-        spinbox = tk.Spinbox(row, from_=0.5, to=60.0, increment=0.5,
-                             textvariable=interval_var,
-                             font=('Segoe UI', 10), width=12,
-                             bg=C_CARD2, fg=C_TXT1,
-                             buttonbackground=C_CARD2,
-                             relief=tk.FLAT, insertbackground=C_ACCENT)
-        spinbox.pack(side=tk.LEFT, padx=8)
-        tk.Label(row, text="(0.5 – 60)", font=('Segoe UI', 8),
-                 bg=C_BASE, fg=C_TXT3).pack(side=tk.LEFT)
-
-        # Info box
-        info_card = tk.Frame(body, bg=C_CARD, padx=12, pady=10)
-        info_card.pack(fill=tk.X, pady=8)
-        tk.Label(info_card,
-                 text="ℹ  Auto annotate will:\n"
-                      "   • Run inference on the current image\n"
-                      "   • Move to the next image automatically\n"
-                      "   • Repeat until you press Stop",
-                 font=('Segoe UI', 9), bg=C_CARD, fg=C_TXT2,
-                 justify=tk.LEFT).pack(anchor='w')
-
-        result = {'start': False}
-
-        def on_start():
-            try:
-                secs = interval_var.get()
-                if secs < 0.5 or secs > 60:
-                    messagebox.showwarning("Invalid Input",
-                                          "Interval must be between 0.5–60 seconds!",
-                                          parent=dialog)
-                    return
-                result['start'] = True
-                result['interval'] = int(secs * 1000)
-                dialog.destroy()
-            except Exception as e:
-                messagebox.showerror("Error", f"Invalid input: {str(e)}", parent=dialog)
-
-        def on_cancel():
-            result['start'] = False
-            dialog.destroy()
-
-        # Button row
-        btn_row = tk.Frame(body, bg=C_BASE)
-        btn_row.pack(fill=tk.X, pady=(4, 0))
-
-        self._btn(btn_row, "✕  Cancel", on_cancel, C_RED, '#ffffff',
-                  font_size=10, bold=True).pack(side=tk.LEFT, ipady=8, ipadx=12)
-        self._btn(btn_row, "▶  Start Auto", on_start, C_GREEN, '#000000',
-                  font_size=10, bold=True).pack(side=tk.RIGHT, ipady=8, ipadx=16)
-
-        dialog.bind('<Return>', lambda e: on_start())
-        dialog.bind('<Escape>', lambda e: on_cancel())
-        dialog.wait_window()
-        return result
-
-    def start_auto_annotate(self):
-        if self.auto_annotate_running:
-            messagebox.showinfo("Already Running", "Auto annotate is already running!",
-                                parent=self.root)
-            return
-        config = self.show_auto_annotate_config_dialog()
-        if not config['start']:
-            return
-        self.auto_annotate_interval = config['interval']
-        self.auto_annotate_running = True
-        self.update_auto_annotate_status()
-        print(f"[AUTO ANNOTATE] Started with interval: {self.auto_annotate_interval/1000}s")
-        self._auto_annotate_cycle()
-
-    def _auto_annotate_cycle(self):
-        if not self.auto_annotate_running:
-            return
-        if self.inference_in_progress:
-            print("[AUTO ANNOTATE] ⚠️  Skipping cycle — inference still in progress")
-            self.auto_annotate_job = self.root.after(1000, self._auto_annotate_cycle)
-            return
-        try:
-            self.inference_in_progress = True
-            print(f"[AUTO ANNOTATE] 🔄 Processing image {state.current_index + 1}/{len(self.images)}")
-            self.run_inference()
-            self.save_current()
-            self.inference_in_progress = False
-            state.current_index = (state.current_index + 1) % len(self.images)
-            self.load_current_image()
-            self.update_display()
-            print(f"[AUTO ANNOTATE] ✅ Completed. Next cycle in {self.auto_annotate_interval/1000}s")
-            self.auto_annotate_job = self.root.after(self.auto_annotate_interval,
-                                                      self._auto_annotate_cycle)
-        except Exception as e:
-            self.inference_in_progress = False
-            print(f"[AUTO ANNOTATE] ❌ Error: {str(e)}")
-            self.stop_auto_annotate()
-            messagebox.showerror("Auto Annotate Error",
-                                 f"Error during auto annotate:\n{str(e)}",
-                                 parent=self.root)
-
-    def stop_auto_annotate(self):
-        if not self.auto_annotate_running:
-            return
-        self.auto_annotate_running = False
-        if self.auto_annotate_job:
-            self.root.after_cancel(self.auto_annotate_job)
-            self.auto_annotate_job = None
-        self.inference_in_progress = False
-        self.update_auto_annotate_status()
-        print("[AUTO ANNOTATE] Stopped")
-        messagebox.showinfo("Auto Annotate Stopped",
-                            "Auto annotate has been stopped.", parent=self.root)
-
-    def toggle_auto_annotate(self):
-        if self.auto_annotate_running:
-            self.stop_auto_annotate()
-        else:
-            self.start_auto_annotate()
-
-    def update_auto_annotate_status(self):
-        if self.auto_annotate_running:
-            self.auto_annotate_label.config(
-                text=f"🔄 AUTO  ({self.auto_annotate_interval/1000}s)",
-                fg=C_GREEN
-            )
-            self.auto_annotate_btn.config(text="⏸  Stop Auto", bg=C_RED, fg='#ffffff')
-        else:
-            self.auto_annotate_label.config(text="🤖 Auto Annotate", fg=C_TXT3)
-            self.auto_annotate_btn.config(text="▶  Start Auto", bg='#1a3a28', fg=C_GREEN)
-
     # ----------------------------------------------------------
     #  CREATE WIDGETS — main UI construction
     # ----------------------------------------------------------
@@ -400,19 +207,27 @@ class AnnotationGUI:
         logo_img = logo_img.resize((32, 32))  # sesuaikan ukuran
         self.logo = ImageTk.PhotoImage(logo_img)
         brand = tk.Frame(header, bg=C_PANEL)
-        brand.pack(side=tk.LEFT, padx=(14, 0))
+        brand.pack(side=tk.LEFT, padx=(10, 0))
+
+        self._btn(brand, "🏠", self.back_to_workspace,
+                  C_PANEL, C_ACCENT, font_size=11).pack(
+            side=tk.LEFT, padx=(0, 2), pady=10, ipady=0, ipadx=0)
 
         tk.Label(brand, image=self.logo, bg=C_PANEL).pack(side=tk.LEFT, pady=10)
         name_stack = tk.Frame(brand, bg=C_PANEL)
         name_stack.pack(side=tk.LEFT, padx=(5, 0))
         tk.Label(name_stack, text="BOXIFY", bg=C_PANEL, fg=C_TXT1,
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w')
-        tk.Label(name_stack, text="ANNOTATOR", bg=C_PANEL, fg=C_TXT3,
+        tk.Label(name_stack, text=workspaceName.upper(), bg=C_PANEL, fg=C_TXT3,
                  font=('Segoe UI', 6, 'bold')).pack(anchor='w')
 
         # vertical separator
         tk.Frame(header, bg=C_BORDER, width=1).pack(side=tk.LEFT,
                                                       fill=tk.Y, pady=10, padx=10)
+
+        # vertical separator
+        tk.Frame(header, bg=C_BORDER, width=1).pack(side=tk.LEFT,
+                                                      fill=tk.Y, pady=10, padx=8)
 
         # — Navigation —
         nav = tk.Frame(header, bg=C_PANEL)
@@ -461,18 +276,6 @@ class AnnotationGUI:
                                    C_CARD2, C_TXT2, font_size=8)
         self.mask_btn.pack(side=tk.LEFT, padx=2, pady=12, ipady=5, ipadx=8)
 
-        tk.Frame(header, bg=C_BORDER, width=1).pack(side=tk.LEFT,
-                                                      fill=tk.Y, pady=10, padx=10)
-
-        # — Auto-annotate control block —
-        auto_blk = tk.Frame(header, bg=C_PANEL)
-        auto_blk.pack(side=tk.LEFT, padx=4)
-
-        self.auto_annotate_btn = self._btn(auto_blk, "Auto Annotate",
-                                            self.toggle_auto_annotate,
-                                            '#0e2218', C_GREEN, font_size=8)
-        self.auto_annotate_btn.pack(padx=2, pady=2, ipady=1, ipadx=1)
-
         # — Right-side status badges —
         status_panel = tk.Frame(header, bg=C_PANEL)
         status_panel.pack(side=tk.RIGHT, padx=12)
@@ -487,10 +290,6 @@ class AnnotationGUI:
         self.force_label = tk.Label(status_panel, text="Force: OFF",
                                      bg=C_CARD, fg=C_TXT3, **badge_cfg)
         self.force_label.pack(side=tk.RIGHT, padx=3, pady=14)
-
-        self.auto_label = tk.Label(status_panel, text="Auto Annotate: OFF",
-                                    bg=C_CARD, fg=C_TXT3, **badge_cfg)
-        self.auto_label.pack(side=tk.RIGHT, padx=3, pady=14)
 
         self.text_label = tk.Label(status_panel, text="Text: ON",
                                     bg=C_CARD, fg=C_GREEN, **badge_cfg)
@@ -718,7 +517,7 @@ class AnnotationGUI:
         tk.Label(
             status_bar,
             text="A/D: Navigate  ·  B: BBox  ·  M: Mode  ·  G: Infer  ·  "
-                 "T: Train  ·  F: Auto  ·  Del: Remove img  ·  Esc: Exit",
+                 "T: Train  ·  Del: Remove img  ·  Esc: Exit",
             bg=C_PANEL, fg=C_TXT3, font=('Segoe UI', 7)
         ).pack(side=tk.RIGHT, padx=10)
 
@@ -974,48 +773,48 @@ class AnnotationGUI:
         return target
 
     def _export_yolo_dataset(self, target, train_pct, valid_pct, image_exts, progress_cb=None):
-        """Export indexed inference images/labels as a YOLO train/val/test split."""
-        imgs_src = os.path.join(inference_root, 'images')
-        lbls_src = os.path.join(inference_root, 'labels')
-        if not os.path.isdir(imgs_src):
-            raise ValueError(f'No images in {imgs_src}')
+        """Export the workspace's YOLO labels as a train/val/test split, pulling
+        source images straight from datasetsInput (never from a copied folder)."""
+        records = self._find_workspace_images(image_exts)
+        images_by_base = {r['base']: r['source'] for r in records}
 
-        imgs = [f for f in os.listdir(imgs_src) if f.lower().endswith(image_exts)]
-        if not imgs:
-            raise ValueError(f'No images in {imgs_src}')
+        label_files = [f for f in os.listdir(yolo_labels_folder) if f.endswith('.txt')] \
+            if os.path.isdir(yolo_labels_folder) else []
+        pairs = [(images_by_base[base], base + '.txt')
+                 for base in (os.path.splitext(f)[0] for f in label_files)
+                 if base in images_by_base]
 
-        random.shuffle(imgs)
-        n = len(imgs)
+        if not pairs:
+            raise ValueError(f'No labeled images found for workspace {workspaceName}')
+
+        random.shuffle(pairs)
+        n = len(pairs)
         n_train = int(round(n * (train_pct / 100.0)))
         n_valid = int(round(n * (valid_pct / 100.0)))
         if n_train + n_valid > n:
             n_valid = max(0, n - n_train)
         splits = {
-            'train': imgs[:n_train],
-            'val': imgs[n_train:n_train + n_valid],
-            'test': imgs[n_train + n_valid:]
+            'train': pairs[:n_train],
+            'val': pairs[n_train:n_train + n_valid],
+            'test': pairs[n_train + n_valid:]
         }
 
         processed = 0
-        for split_name, files in splits.items():
+        for split_name, split_pairs in splits.items():
             out_images = os.path.join(target, split_name, 'images')
             out_labels = os.path.join(target, split_name, 'labels')
             os.makedirs(out_images, exist_ok=True)
             os.makedirs(out_labels, exist_ok=True)
-            for im in files:
+            for img_src, lbl_name in split_pairs:
                 try:
-                    shutil.copy2(os.path.join(imgs_src, im), os.path.join(out_images, im))
+                    shutil.copy2(img_src, os.path.join(out_images, os.path.basename(img_src)))
                 except Exception:
                     pass
-                base = os.path.splitext(im)[0]
-                lbl_src = os.path.join(lbls_src, base + '.txt')
-                if os.path.exists(lbl_src):
-                    try:
-                        shutil.copy2(lbl_src, os.path.join(out_labels, base + '.txt'))
-                    except Exception:
-                        pass
-                else:
-                    open(os.path.join(out_labels, base + '.txt'), 'w').close()
+                try:
+                    shutil.copy2(os.path.join(yolo_labels_folder, lbl_name),
+                                 os.path.join(out_labels, lbl_name))
+                except Exception:
+                    pass
 
                 processed += 1
                 if progress_cb:
@@ -1890,15 +1689,7 @@ class AnnotationGUI:
         self.save_current()
         state.current_index = actual_idx
 
-        if state.automated_annotation:
-            state.auto_annotation = True
-
         self.load_current_image()
-
-        if state.auto_annotation:
-            self.run_inference()
-            state.auto_annotation = False
-
         self.update_display()
         print(f"[GUI] Loaded image from list: {selected_img}")
 
@@ -2537,6 +2328,15 @@ class AnnotationGUI:
         self.root.quit()
         self.root.destroy()
 
+    def back_to_workspace(self):
+        """Close this workspace and hand control back to the workspace picker."""
+        if messagebox.askyesno(
+            "Back to Workspaces",
+            "Leave this workspace and return to the workspace list?",
+            parent=self.root
+        ):
+            self.close_main_gui()
+
     def finish_polygon_drawing(self):
         if len(state.polygon_points_preview) < 3:
             messagebox.showwarning("Invalid Polygon",
@@ -2798,23 +2598,13 @@ class AnnotationGUI:
     def next_image(self):
         self.save_current()
         state.current_index = (state.current_index + 1) % len(self.images)
-        if state.automated_annotation:
-            state.auto_annotation = True
         self.load_current_image()
-        if state.auto_annotation:
-            self.run_inference()
-            state.auto_annotation = False
         self.update_display()
 
     def prev_image(self):
         self.save_current()
         state.current_index = (state.current_index - 1) % len(self.images)
-        if state.automated_annotation:
-            state.auto_annotation = True
         self.load_current_image()
-        if state.auto_annotation:
-            self.run_inference()
-            state.auto_annotation = False
         self.update_display()
 
     def save_current(self):
@@ -3017,20 +2807,25 @@ class AnnotationGUI:
 
         state.training_running = True
         train_script = os.path.join(os.path.dirname(__file__), "training.py")
-        dataset_root = inference_root
-        images_folder = input_folder
+        dataset_root = yolo_dataset_folder
+        image_exts = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp')
+        image_folders = sorted({os.path.dirname(r['source'])
+                                for r in self._find_workspace_images(image_exts)})
+        if not image_folders:
+            image_folders = [input_folder]
         class_args = list(CLASSLIST)
 
         cmd = [
             sys.executable, train_script,
-            "--dataset_root",  dataset_root,
-            "--images_folder", images_folder,
-            "--model_type",    model_type,
-            "--model_path",    model_path,
-            "--model_folder",  model_folder,
-            "--epochs",        str(current_epoch),
-            "--batch",         str(current_batch),
-            "--imgsz",         str(current_imgsz),
+            "--dataset_root",   dataset_root,
+            "--images_folders", *image_folders,
+            "--labels_folder",  yolo_labels_folder,
+            "--model_type",     model_type,
+            "--model_path",     model_path,
+            "--model_folder",   model_folder,
+            "--epochs",         str(current_epoch),
+            "--batch",          str(current_batch),
+            "--imgsz",          str(current_imgsz),
         ]
         if selected_base:
             cmd += ["--base_model", selected_base]

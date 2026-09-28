@@ -23,9 +23,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description="YOLO Training Script")
 
     parser.add_argument("--dataset_root",   type=str, required=True,
-                        help="Root folder dataset (contains images/ and labels/)")
-    parser.add_argument("--images_folder",  type=str, required=True,
-                        help="Folder containing training images")
+                        help="Scratch root for the train/val split + data.yaml "
+                             "(YOLOdataset/<workspace>)")
+    parser.add_argument("--images_folders", nargs="+", required=True,
+                        help="datasetsInput instance folders to read source images from")
+    parser.add_argument("--labels_folder",  type=str, required=True,
+                        help="Folder containing the workspace's YOLO .txt labels")
     parser.add_argument("--classlist",      nargs="+", required=True,
                         help="Class names, e.g.: --classlist person car motor")
     parser.add_argument("--model_path",     type=str, default="best.pt",
@@ -55,44 +58,55 @@ def parse_args():
 # Dataset split
 # ─────────────────────────────────────────────────────────────────
 
-def split_train_val(root, ratio=0.7):
-    """Split dataset into train and validation sets."""
-    images_dir = os.path.join(root, "images")
-    labels_dir = os.path.join(root, "labels")
+def index_source_images(images_folders, image_exts=('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp')):
+    """Map {basename: absolute image path} across every given source folder.
+    A later folder wins on basename collisions (rare, but keeps this deterministic)."""
+    images = {}
+    for folder in images_folders:
+        if not os.path.isdir(folder):
+            continue
+        for f in os.listdir(folder):
+            if f.lower().endswith(image_exts):
+                images[os.path.splitext(f)[0]] = os.path.join(folder, f)
+    return images
 
-    imgs = [f for f in os.listdir(images_dir)
-            if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
 
-    if len(imgs) < 2:
-        print("[WARN] Not enough images to split train/val.")
+def split_train_val(dataset_root, images_index, labels_dir, ratio=0.7):
+    """Split the *labeled* images into train/val sets, copying each image
+    (from wherever it lives in datasetsInput) and its YOLO label into a
+    temporary train/val tree under dataset_root."""
+    label_files = [f for f in os.listdir(labels_dir) if f.lower().endswith('.txt')]
+
+    pairs = []
+    for lbl in label_files:
+        base = os.path.splitext(lbl)[0]
+        if base in images_index:
+            pairs.append((images_index[base], lbl))
+
+    if len(pairs) < 2:
+        print("[WARN] Not enough labeled images to split train/val.")
         return None, None
 
-    np.random.shuffle(imgs)
-    train_count = int(len(imgs) * ratio)
-    train_imgs  = imgs[:train_count]
-    val_imgs    = imgs[train_count:]
+    np.random.shuffle(pairs)
+    train_count = int(len(pairs) * ratio)
+    train_pairs = pairs[:train_count]
+    val_pairs   = pairs[train_count:]
 
-    train_img_dir = os.path.join(root, "train/images")
-    train_lbl_dir = os.path.join(root, "train/labels")
-    val_img_dir   = os.path.join(root, "val/images")
-    val_lbl_dir   = os.path.join(root, "val/labels")
+    train_img_dir = os.path.join(dataset_root, "train/images")
+    train_lbl_dir = os.path.join(dataset_root, "train/labels")
+    val_img_dir   = os.path.join(dataset_root, "val/images")
+    val_lbl_dir   = os.path.join(dataset_root, "val/labels")
 
     for d in [train_img_dir, train_lbl_dir, val_img_dir, val_lbl_dir]:
         os.makedirs(d, exist_ok=True)
 
-    for img in train_imgs:
-        base = os.path.splitext(img)[0]
-        shutil.copy2(os.path.join(images_dir, img), os.path.join(train_img_dir, img))
-        lbl = base + ".txt"
-        if os.path.exists(os.path.join(labels_dir, lbl)):
-            shutil.copy2(os.path.join(labels_dir, lbl), os.path.join(train_lbl_dir, lbl))
+    for img_path, lbl in train_pairs:
+        shutil.copy2(img_path, os.path.join(train_img_dir, os.path.basename(img_path)))
+        shutil.copy2(os.path.join(labels_dir, lbl), os.path.join(train_lbl_dir, lbl))
 
-    for img in val_imgs:
-        base = os.path.splitext(img)[0]
-        shutil.copy2(os.path.join(images_dir, img), os.path.join(val_img_dir, img))
-        lbl = base + ".txt"
-        if os.path.exists(os.path.join(labels_dir, lbl)):
-            shutil.copy2(os.path.join(labels_dir, lbl), os.path.join(val_lbl_dir, lbl))
+    for img_path, lbl in val_pairs:
+        shutil.copy2(img_path, os.path.join(val_img_dir, os.path.basename(img_path)))
+        shutil.copy2(os.path.join(labels_dir, lbl), os.path.join(val_lbl_dir, lbl))
 
     return train_img_dir, val_img_dir
 
@@ -104,29 +118,33 @@ def split_train_val(root, ratio=0.7):
 def train_model(args):
     """Train YOLO model dari argparse inputs."""
 
-    inference_images = args.images_folder
-    inference_root   = args.dataset_root
-    CLASSLIST        = args.classlist
-    model_path       = args.model_path
-    model_folder     = args.model_folder
-    model_type       = args.model_type   # "detect" | "seg"
+    dataset_root  = args.dataset_root
+    labels_dir    = args.labels_folder
+    CLASSLIST     = args.classlist
+    model_path    = args.model_path
+    model_folder  = args.model_folder
+    model_type    = args.model_type   # "detect" | "seg"
 
-    # Minimum image check
-    images_infer = [f for f in os.listdir(inference_images)
-                    if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
-    if len(images_infer) < 10:
-        print("[INFO] Not enough images to train (min 10 required).")
+    # Minimum label check - only annotated images are trainable
+    label_files = [f for f in os.listdir(labels_dir) if f.lower().endswith('.txt')] \
+        if os.path.isdir(labels_dir) else []
+    if len(label_files) < 10:
+        print("[INFO] Not enough labeled images to train (min 10 required).")
         return
 
-    # Dataset split
+    # Dataset split - images are read straight from datasetsInput, never
+    # copied except into this temporary train/val tree.
+    print("[INFO] Indexing source images...")
+    images_index = index_source_images(args.images_folders)
+
     print("[INFO] Splitting dataset...")
-    train_dir, val_dir = split_train_val(inference_root, ratio=args.ratio)
+    train_dir, val_dir = split_train_val(dataset_root, images_index, labels_dir, ratio=args.ratio)
     if train_dir is None or val_dir is None:
         print("[ERROR] Dataset split failed.")
         return
 
     # Write data.yaml
-    yaml_path = os.path.join(inference_root, "data.yaml")
+    yaml_path = os.path.join(dataset_root, "data.yaml")
     with open(yaml_path, "w") as f:
         f.write(f"train: {os.path.abspath(train_dir)}\n")
         f.write(f"val:   {os.path.abspath(val_dir)}\n")
@@ -195,8 +213,8 @@ def train_model(args):
     # ── Bersihkan folder sementara ───────────────────────────────
     try:
         print("[INFO] Cleaning temporary train/val folders...")
-        shutil.rmtree(os.path.join(inference_root, "train"))
-        shutil.rmtree(os.path.join(inference_root, "val"))
+        shutil.rmtree(os.path.join(dataset_root, "train"))
+        shutil.rmtree(os.path.join(dataset_root, "val"))
         print("[INFO] train/ & val/ removed.")
     except Exception as e:
         print("[WARN] Failed to delete train/val folders:", e)

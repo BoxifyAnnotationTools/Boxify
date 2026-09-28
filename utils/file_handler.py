@@ -3,18 +3,19 @@ File handling functions for VOC and YOLO formats
 Supports both bounding boxes and polygons
 """
 import os
-import shutil
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
-from .config import vocdataset_folder, inference_labels, inference_images, input_folder, CLASSLIST, state
+from .config import vocdataset_folder, yolo_labels_folder, CLASSLIST, state
 
 def prettify_xml(elem):
     """Convert XML to pretty-printed string"""
     return minidom.parseString(ET.tostring(elem)).toprettyxml(indent="   ")
 
-def save_pascal_voc(img_name, img_shape):
-    """Save annotations in Pascal VOC format (bboxes and polygons)"""
-    xml_path = os.path.join(vocdataset_folder, os.path.splitext(img_name)[0] + ".xml")
+def build_voc_xml(img_name, img_shape, bboxes, polygons):
+    """Build a Pascal VOC <annotation> element (Boxify's schema: bbox/polygon
+    objects, each with a <type>) from bboxes/polygons in ORIGINAL image
+    coordinates. Pure - no config/state dependency, so it's reusable by the
+    dataset importer as well as save_pascal_voc."""
     ann = ET.Element("annotation")
     ET.SubElement(ann, "folder").text = "dataset"
     ET.SubElement(ann, "filename").text = img_name
@@ -22,10 +23,8 @@ def save_pascal_voc(img_name, img_shape):
     ET.SubElement(size, "width").text = str(img_shape[1])
     ET.SubElement(size, "height").text = str(img_shape[0])
     ET.SubElement(size, "depth").text = str(img_shape[2] if len(img_shape) > 2 else 3)
-    
-    # Save bboxes
-    for bbox in state.bboxes:
-        # `state.bboxes` are stored in ORIGINAL image coordinates
+
+    for bbox in bboxes:
         x1 = int(round(bbox[0]))
         y1 = int(round(bbox[1]))
         x2 = int(round(bbox[2]))
@@ -39,135 +38,248 @@ def save_pascal_voc(img_name, img_shape):
         ET.SubElement(bnd, "ymin").text = str(max(0, y1))
         ET.SubElement(bnd, "xmax").text = str(max(0, x2))
         ET.SubElement(bnd, "ymax").text = str(max(0, y2))
-    
-    # Save polygons
-    for polygon_data in state.polygons:
-        points_orig = polygon_data[0]  # Points already in ORIGINAL coordinates (stored as float)
+
+    for polygon_data in polygons:
+        points_orig = polygon_data[0]  # ORIGINAL coordinates (float)
         cls = polygon_data[1]
-        
+
         obj = ET.SubElement(ann, "object")
         ET.SubElement(obj, "name").text = cls
         ET.SubElement(obj, "type").text = "polygon"
-        
-        # Points are already in original coordinates, just save directly
+
         poly_elem = ET.SubElement(obj, "polygon")
         for x, y in points_orig:
-            # Round to int for storage
             x_int = int(round(x))
             y_int = int(round(y))
             pt = ET.SubElement(poly_elem, "point")
             ET.SubElement(pt, "x").text = str(max(0, x_int))
             ET.SubElement(pt, "y").text = str(max(0, y_int))
-    
+
+    return ann
+
+
+def save_pascal_voc(img_name, img_shape):
+    """Save annotations in Pascal VOC format (bboxes and polygons)"""
+    xml_path = os.path.join(vocdataset_folder, os.path.splitext(img_name)[0] + ".xml")
+    ann = build_voc_xml(img_name, img_shape, state.bboxes, state.polygons)
     with open(xml_path, "w") as f:
         f.write(prettify_xml(ann))
     print(f"[INFO] Saved VOC: {xml_path}")
 
-def save_yolo_label_and_image(img_name, orig_img, classList):
+def _yolo_lines_from_annotations(bboxes, polygons, classList, w, h):
     """
-    Save YOLO format labels (supports both detection and segmentation)
-    - If ONLY bboxes: saved in detection format (class_id cx cy width height)
-    - If polygons exist: ALL annotations saved in segmentation format
-      (including bboxes converted to polygon format)
+    Build YOLO-format label lines from a set of bboxes/polygons (all in
+    ORIGINAL image coordinates).
+    - If ONLY bboxes: detection format (class_id cx cy width height)
+    - If polygons exist: ALL annotations use segmentation format
+      (bboxes get converted to a 4-point polygon)
     """
-    base = os.path.splitext(img_name)[0]
-    label_path = os.path.join(inference_labels, base + ".txt")
-    dest_img = os.path.join(inference_images, img_name)
-    h, w, c = orig_img
     lines = []
-
-    # Check if dataset has polygons
-    has_polygons = len(state.polygons) > 0
+    has_polygons = len(polygons) > 0
 
     if has_polygons:
-        print(f"[FILE_HANDLER] Dataset has polygons - using segmentation format for all annotations")
-        
-        # Convert bboxes (stored in ORIGINAL coordinates) to polygon format
-        for bbox in state.bboxes:
+        # Convert bboxes to polygon format
+        for bbox in bboxes:
             x1, y1, x2, y2, cls = bbox
-
             if cls not in classList:
                 continue
-
             idx = classList.index(cls)
 
-            # Coordinates already in original image scale
-            x1_orig = x1
-            y1_orig = y1
-            x2_orig = x2
-            y2_orig = y2
-
-            # Create 4-point polygon from bbox corners
             bbox_polygon_points = [
-                (x1_orig, y1_orig),  # top-left
-                (x2_orig, y1_orig),  # top-right
-                (x2_orig, y2_orig),  # bottom-right
-                (x1_orig, y2_orig),  # bottom-left
+                (x1, y1),  # top-left
+                (x2, y1),  # top-right
+                (x2, y2),  # bottom-right
+                (x1, y2),  # bottom-left
             ]
-
-            # Normalize to 0-1 range and format
             normalized_points = []
             for x, y in bbox_polygon_points:
                 x_norm = max(0, min(1, x / w))
                 y_norm = max(0, min(1, y / h))
                 normalized_points.append(f"{x_norm:.6f} {y_norm:.6f}")
+            lines.append(f"{idx} " + " ".join(normalized_points))
 
-            # YOLO segmentation format
-            line = f"{idx} " + " ".join(normalized_points)
-            lines.append(line)
-        
-        # Save polygons in YOLO segmentation format
-        for polygon_data in state.polygons:
-            points_orig = polygon_data[0]  # Points already in ORIGINAL coordinates (stored as float)
-            cls = polygon_data[1]
-            
+        # Polygons in YOLO segmentation format
+        for polygon_data in polygons:
+            points_orig, cls = polygon_data[0], polygon_data[1]
             if cls not in classList:
                 continue
-            
             idx = classList.index(cls)
-            
-            # Normalize points to 0-1 range (points already in original scale)
+
             normalized_points = []
             for x, y in points_orig:
                 x_norm = max(0, min(1, x / w))
                 y_norm = max(0, min(1, y / h))
                 normalized_points.append(f"{x_norm:.6f} {y_norm:.6f}")
-            
-            # YOLO segmentation format
             if normalized_points:
-                line = f"{idx} " + " ".join(normalized_points)
-                lines.append(line)
-                print(f"[FILE_HANDLER] Saved polygon segment: {cls} with {len(normalized_points)} points")
+                lines.append(f"{idx} " + " ".join(normalized_points))
 
     else:
         # Detection format only (no polygons)
-        for bbox in state.bboxes:
+        for bbox in bboxes:
             x1, y1, x2, y2, cls = bbox
-
             if cls not in classList:
                 continue
-
             idx = classList.index(cls)
 
-            # Coordinates already in original image scale
-            x1_orig = x1
-            y1_orig = y1
-            x2_orig = x2
-            y2_orig = y2
-
-            # Normalize to 0-1 range
-            bw = (x2_orig - x1_orig) / w
-            bh = (y2_orig - y1_orig) / h
-            cx = (x1_orig + x2_orig) / 2 / w
-            cy = (y1_orig + y2_orig) / 2 / h
-
+            bw = (x2 - x1) / w
+            bh = (y2 - y1) / h
+            cx = (x1 + x2) / 2 / w
+            cy = (y1 + y2) / 2 / h
             lines.append(f"{idx} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
+
+    return lines
+
+
+def save_yolo_label(img_name, orig_img, classList):
+    """
+    Save YOLO format labels for the currently annotated image (state.bboxes /
+    state.polygons). Images are never copied - YOLO training/export read them
+    straight out of datasetsInput, keyed by filename against these labels.
+    """
+    base = os.path.splitext(img_name)[0]
+    label_path = os.path.join(yolo_labels_folder, base + ".txt")
+    h, w, c = orig_img
+
+    lines = _yolo_lines_from_annotations(state.bboxes, state.polygons, classList, w, h)
 
     with open(label_path, "w") as f:
         f.write("\n".join(lines))
 
-    shutil.copy2(os.path.join(input_folder, img_name), dest_img)
     print(f"[INFO] Saved YOLO label: {label_path} ({len(lines)} annotations)")
+
+
+def _read_voc_size(xml_path):
+    """Read (height, width) from a VOC XML's <size> block, or None if missing/invalid."""
+    try:
+        root = ET.parse(xml_path).getroot()
+        return _parse_voc_size(root)
+    except (ET.ParseError, OSError):
+        return None
+
+
+def _parse_voc_size(root):
+    """Extract (height, width) from an already-parsed VOC XML root, or None."""
+    size = root.find("size")
+    if size is None:
+        return None
+    try:
+        w = int(float(size.find("width").text))
+        h = int(float(size.find("height").text))
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if w <= 0 or h <= 0:
+        return None
+    return h, w
+
+
+def _parse_voc_objects(root):
+    """Extract (boxes, polygons) from an already-parsed VOC XML root.
+    Same format handling as load_annotation_local, without the per-object
+    logging - used for bulk backfill where thousands of files get parsed."""
+    boxes = []
+    polygons = []
+
+    for obj in root.findall("object"):
+        cls = obj.find("name").text
+
+        poly_elem = obj.find("polygon")
+        is_polygon = False
+        points = []
+
+        if poly_elem is not None:
+            point_elems = poly_elem.findall("point")
+            if point_elems:
+                for point_elem in point_elems:
+                    points.append((float(point_elem.find("x").text), float(point_elem.find("y").text)))
+                is_polygon = len(points) >= 3
+
+            if not is_polygon:
+                roboflow_points = []
+                i = 1
+                while True:
+                    xi_elem = poly_elem.find(f"x{i}")
+                    yi_elem = poly_elem.find(f"y{i}")
+                    if xi_elem is None or yi_elem is None:
+                        break
+                    roboflow_points.append((float(xi_elem.text), float(yi_elem.text)))
+                    i += 1
+                if len(roboflow_points) >= 3:
+                    points = roboflow_points
+                    is_polygon = True
+
+        if is_polygon:
+            polygons.append([points, cls])
+        else:
+            bb = obj.find("bndbox")
+            if bb is not None:
+                boxes.append([
+                    int(round(float(bb.find("xmin").text))),
+                    int(round(float(bb.find("ymin").text))),
+                    int(round(float(bb.find("xmax").text))),
+                    int(round(float(bb.find("ymax").text))),
+                    cls
+                ])
+
+    return boxes, polygons
+
+
+def sync_yolo_labels(classList, progress_cb=None):
+    """
+    Ensure every VOC XML annotation has a matching YOLO label in
+    yolo_labels_folder, generating any that are missing (e.g. after
+    migrating a workspace, or restoring vocdataset/ from backup).
+
+    Cheap to call on every workspace open: only XML files that don't already
+    have a .txt counterpart get parsed - each parsed exactly once.
+
+    progress_cb(done, total), if given, is called after each missing file is
+    processed so a caller can show progress on a first-time bulk backfill.
+
+    Returns the number of YOLO labels generated.
+    """
+    if not os.path.isdir(vocdataset_folder):
+        return 0
+
+    xml_files = [f for f in os.listdir(vocdataset_folder) if f.lower().endswith('.xml')]
+    if not xml_files:
+        return 0
+
+    os.makedirs(yolo_labels_folder, exist_ok=True)
+    existing_labels = set(os.listdir(yolo_labels_folder))
+
+    missing = [f for f in xml_files if os.path.splitext(f)[0] + ".txt" not in existing_labels]
+
+    generated = 0
+    for xml_file in missing:
+        base = os.path.splitext(xml_file)[0]
+        xml_path = os.path.join(vocdataset_folder, xml_file)
+
+        try:
+            root = ET.parse(xml_path).getroot()
+        except (ET.ParseError, OSError) as exc:
+            print(f"[FILE_HANDLER] Skipping YOLO backfill for {xml_file}: {exc}")
+            continue
+
+        size = _parse_voc_size(root)
+        if size is None:
+            print(f"[FILE_HANDLER] Skipping YOLO backfill for {xml_file}: no <size> in XML")
+            continue
+        h, w = size
+
+        boxes, polygons = _parse_voc_objects(root)
+        lines = _yolo_lines_from_annotations(boxes, polygons, classList, w, h)
+
+        with open(os.path.join(yolo_labels_folder, base + ".txt"), "w") as f:
+            f.write("\n".join(lines))
+        generated += 1
+
+        if progress_cb:
+            progress_cb(generated, len(missing))
+
+    if generated:
+        print(f"[FILE_HANDLER] Backfilled {generated} missing YOLO label(s) from VOC XML")
+
+    return generated
 
 
 def load_annotation_local(img_name_local):

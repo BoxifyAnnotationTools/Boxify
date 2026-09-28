@@ -13,9 +13,9 @@ class ClassManager:
         self.workspace_name = workspace_name
         self.config_dir = "configs"
         self.class_file = os.path.join(self.config_dir, f"{workspace_name}.txt")
-        self.inference_root = f"inference/{workspace_name}"
-        self.labels_folder = os.path.join(self.inference_root, "labels")
-        self.data_yaml_path = os.path.join(self.inference_root, "data.yaml")
+        self.yolo_dataset_root = f"YOLOdataset/{workspace_name}"
+        self.labels_folder = os.path.join(self.yolo_dataset_root, "labels")
+        self.data_yaml_path = os.path.join(self.yolo_dataset_root, "data.yaml")
         self.voc_dataset = f"vocdataset/{workspace_name}"
         
         os.makedirs(self.config_dir, exist_ok=True)
@@ -266,8 +266,8 @@ class ClassManager:
         """Update data.yaml with current classes"""
         if not os.path.exists(self.data_yaml_path):
             # Buat data.yaml baru jika belum ada
-            train_path = os.path.join(self.inference_root, "train/images")
-            val_path = os.path.join(self.inference_root, "val/images")
+            train_path = os.path.join(self.yolo_dataset_root, "train/images")
+            val_path = os.path.join(self.yolo_dataset_root, "val/images")
         else:
             # Parse existing data.yaml untuk ambil train dan val path
             train_path = ""
@@ -281,14 +281,14 @@ class ClassManager:
                             val_path = line.split('val:')[1].strip()
             except Exception as e:
                 print(f"[ClassManager] Error reading data.yaml: {e}")
-                train_path = os.path.join(self.inference_root, "train/images")
-                val_path = os.path.join(self.inference_root, "val/images")
+                train_path = os.path.join(self.yolo_dataset_root, "train/images")
+                val_path = os.path.join(self.yolo_dataset_root, "val/images")
         
         # Jika path masih kosong, set default
         if not train_path:
-            train_path = os.path.join(self.inference_root, "train/images")
+            train_path = os.path.join(self.yolo_dataset_root, "train/images")
         if not val_path:
-            val_path = os.path.join(self.inference_root, "val/images")
+            val_path = os.path.join(self.yolo_dataset_root, "val/images")
         
         # Tulis data.yaml
         with open(self.data_yaml_path, 'w') as f:

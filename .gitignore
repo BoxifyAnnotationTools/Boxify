@@ -19,11 +19,14 @@ export dataset/*
 export model/*
 !export model/.gitignore
 
-inference/*
-!inference/.gitignore
+YOLOdataset/*
+!YOLOdataset/.gitignore
 
 models/*
 !models/.gitignore
 
 vocdataset/*
 !vocdataset/.gitignore
+
+YOLOdataset/*
+!YOLOdataset/.gitignore
